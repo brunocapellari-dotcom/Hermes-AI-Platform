@@ -89,7 +89,57 @@ def test_model_intelligence_detects_recent_drift() -> None:
         )
     summary = intelligence.summarize("m", ModelClass.REASONING, now=now)
     assert summary.samples == 5
-    assert summary.drift_penalty > 0
+    assert summary.drift_penalty == 0.9
+
+
+def test_model_intelligence_does_not_flag_stable_or_sparse_history() -> None:
+    intelligence = ModelIntelligence()
+    now = datetime.now(UTC)
+    for index in range(5):
+        intelligence.record(
+            ModelPerformanceSample(
+                model_id="stable",
+                task_class=ModelClass.REASONING,
+                success=True,
+                quality=0.85,
+                latency_ms=250,
+                cost_usd=0.001,
+                observed_at=now - timedelta(hours=5 - index),
+            )
+        )
+    for index in range(3):
+        intelligence.record(
+            ModelPerformanceSample(
+                model_id="sparse",
+                task_class=ModelClass.REASONING,
+                success=index == 0,
+                quality=1.0 if index == 0 else 0.1,
+                latency_ms=250,
+                cost_usd=0.001,
+                observed_at=now - timedelta(hours=3 - index),
+            )
+        )
+    assert intelligence.summarize("stable", ModelClass.REASONING, now=now).drift_penalty == 0.0
+    assert intelligence.summarize("sparse", ModelClass.REASONING, now=now).drift_penalty == 0.0
+
+
+def test_model_intelligence_normalizes_naive_timestamps() -> None:
+    intelligence = ModelIntelligence()
+    now = datetime.now(UTC)
+    intelligence.record(
+        ModelPerformanceSample(
+            model_id="naive",
+            task_class=ModelClass.REASONING,
+            success=True,
+            quality=0.9,
+            latency_ms=100,
+            cost_usd=0,
+            observed_at=datetime(2026, 9, 15, 12, 0),
+        )
+    )
+    summary = intelligence.summarize("naive", ModelClass.REASONING, now=now)
+    assert summary.samples == 1
+    assert summary.quality_score == 0.9
 
 
 def test_model_intelligence_validates_configuration() -> None:
