@@ -120,6 +120,10 @@ class ModelProfile(BaseModel):
     model_id: str
     provider: str
     model: str
+    version: str | None = None
+    deployment: str | None = None
+    privacy_tier: str = "standard"
+    status: str = "active"
     classes: set[ModelClass]
     context_window: int = 0
     supports_tools: bool = False
@@ -127,10 +131,14 @@ class ModelProfile(BaseModel):
     supports_vision: bool = False
     supports_audio: bool = False
     local: bool = False
+    input_cost_per_million: float = Field(default=0.0, ge=0)
+    output_cost_per_million: float = Field(default=0.0, ge=0)
     cost_score: float = Field(default=0.5, ge=0, le=1)
     latency_score: float = Field(default=0.5, ge=0, le=1)
     quality_score: float = Field(default=0.5, ge=0, le=1)
     benchmark_score: float = Field(default=0.5, ge=0, le=1)
+    benchmark_source: str | None = None
+    last_evaluated_at: datetime | None = None
     available: bool = True
 
 
