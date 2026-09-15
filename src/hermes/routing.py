@@ -21,6 +21,9 @@ DEFAULT_CAPABILITY_REGISTRY: dict[str, str] = {
     "content_creation": "CONTENT_FACTORY",
     "message_processing": "WHATSAPP_AI",
     "training_plan": "PERSONAL_PERFORMANCE",
+    "agent_management": "HERMES",
+    "model_management": "HERMES",
+    "cross_project_analysis": "HERMES",
     "general_reasoning": "HERMES",
 }
 
@@ -41,7 +44,7 @@ class ModelRouter:
         candidates: list[RouteDecision] = []
         for model in self.models:
             reasons: list[str] = []
-            if not model.available:
+            if not model.available or model.status != "active":
                 continue
             if request.private_only and not model.local:
                 continue
