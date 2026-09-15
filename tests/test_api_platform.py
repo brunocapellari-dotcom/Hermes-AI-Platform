@@ -16,6 +16,7 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
         capabilities = client.get("/v1/capabilities")
         assert capabilities.status_code == 200
         assert capabilities.json()["ai_generation_configured"] is False
+        assert capabilities.json()["multimodal_configured"] is False
         assert capabilities.json()["durable_dispatch_configured"] is False
 
         mission = client.post("/v1/missions", json={"request": "Como está a Holding?"}).json()
@@ -26,10 +27,17 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
 
         assert client.post("/v1/chat", json={"prompt": "x"}).status_code == 503
         assert client.post("/v1/reason", json={"prompt": "x"}).status_code == 503
-        for path in ["/v1/embed", "/v1/vision", "/v1/audio/transcribe", "/v1/audio/speech"]:
-            response = client.post(path)
+        unconfigured_requests = [
+            ("/v1/embed", {"inputs": ["x"]}),
+            ("/v1/vision", {"prompt": "x", "image_url": "https://example.test/image.png"}),
+            ("/v1/audio/transcribe", {"audio_base64": "eA==", "filename": "x.bin"}),
+            ("/v1/audio/speech", {"text": "x", "voice": "alloy"}),
+            ("/v1/rerank", {"query": "q", "documents": ["d"]}),
+        ]
+        for path, payload in unconfigured_requests:
+            response = client.post(path, json=payload)
             assert response.status_code == 503
-            assert response.json()["status"] == "unconfigured"
+            assert "not configured" in response.json()["detail"]
 
         context = client.post(
             "/v1/context/select",
@@ -76,9 +84,79 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
         )
         assert improvement.status_code == 409
 
+        evaluation = client.post(
+            "/v1/evaluations/score",
+            json={
+                "case": {"case_id": "api-eval", "prompt": "p", "expected_contains": ["ok"]},
+                "output": "ok",
+            },
+        )
+        assert evaluation.status_code == 200
+        assert evaluation.json()["passed"] is True
+
+        review = client.post(
+            "/v1/reviews",
+            json={"output": "claim", "evidence_count": 1, "confidence": 0.8},
+        )
+        assert review.status_code == 200
+        assert review.json()["approved"] is True
+
+        recovery = client.post("/v1/recovery/decide", json={"status_code": 429})
+        assert recovery.status_code == 200
+        assert recovery.json()["failure_class"] == "rate_limit"
+        assert recovery.json()["retry"] is True
+
+        agent = client.post(
+            "/v1/agents/spec",
+            json={"name": "audited", "project": "AGROLOG_MT", "mission": "test"},
+        )
+        assert agent.status_code == 200
+        audit = client.post(
+            "/v1/agents/audit",
+            json={
+                "spec": agent.json(),
+                "tests_passed": True,
+                "benchmark_passed": True,
+                "independent_review_passed": True,
+            },
+        )
+        assert audit.status_code == 200
+        assert audit.json()["promotable"] is True
+
+        project = client.post(
+            "/v1/projects/validate",
+            json={
+                "key": "AGROLOG_MT",
+                "persist": True,
+                "registration": {
+                    "base_url": "https://agrolog.test",
+                    "capabilities": ["freight_analysis"],
+                    "allow_execute": False,
+                },
+            },
+        )
+        assert project.status_code == 200
+        assert project.json()["valid"] is True
+        assert client.post(
+            "/v1/projects/validate",
+            json={"key": "UNKNOWN", "registration": {}},
+        ).status_code == 404
+
+        authorization = client.post(
+            "/v1/security/authorize",
+            json={"actor": "owner", "action": "read", "risk": "low"},
+        )
+        assert authorization.status_code == 200
+        assert authorization.json()["allowed"] is True
+
         world = client.get("/v1/world-state")
         assert world.status_code == 200
         assert world.json()["mission_status"]["planned"] == 1
+
+        control_center = client.get("/v1/control-center")
+        assert control_center.status_code == 200
+        assert control_center.json()["project_contract_coverage"]["AGROLOG_MT"] is True
+        assert control_center.json()["registered_projects"] == 1
 
         telemetry = client.get("/v1/telemetry/summary")
         assert telemetry.json()["events"] == 0
