@@ -4,7 +4,7 @@ from typing import Any
 from hermes.domain import ActionType, Intent, Mission, MissionStatus, RiskLevel, TaskNode, TaskStatus
 from hermes.persistence import Database, SqlMissionStore
 from hermes.registry import RegistryKind, SqlRegistry
-from hermes.worker import execute_project_task_step, update_task_state_step
+from hermes.worker import _ready_task_wave, execute_project_task_step, update_task_state_step
 
 
 class FakeResponse:
@@ -126,3 +126,52 @@ def test_worker_rejects_project_capability_mismatch(tmp_path: Path, monkeypatch)
     )
     assert result["status"] == "blocked"
     assert "does not advertise" in result["reason"]
+
+
+def mission_with(tasks: list[TaskNode]) -> Mission:
+    return Mission(
+        goal="dag",
+        intent=Intent(explicit_request="dag", goal="dag"),
+        tasks=tasks,
+    )
+
+
+def test_dependency_wave_only_releases_completed_dependencies() -> None:
+    root = TaskNode(capability="a", expected_output="a", status=TaskStatus.COMPLETED)
+    middle = TaskNode(capability="b", expected_output="b", dependencies=[root.task_id])
+    leaf = TaskNode(capability="c", expected_output="c", dependencies=[middle.task_id])
+    ready, blockers = _ready_task_wave(mission_with([root, middle, leaf]))
+    assert [task.task_id for task in ready] == [middle.task_id]
+    assert blockers == {}
+
+
+def test_dependency_wave_releases_independent_tasks_together() -> None:
+    first = TaskNode(capability="a", expected_output="a")
+    second = TaskNode(capability="b", expected_output="b")
+    ready, blockers = _ready_task_wave(mission_with([first, second]))
+    assert {task.task_id for task in ready} == {first.task_id, second.task_id}
+    assert blockers == {}
+
+
+def test_dependency_wave_blocks_unknown_dependency() -> None:
+    task = TaskNode(capability="a", expected_output="a", dependencies=["missing"])
+    ready, blockers = _ready_task_wave(mission_with([task]))
+    assert ready == []
+    assert "unknown task dependencies" in blockers[task.task_id]
+
+
+def test_dependency_wave_detects_cycle() -> None:
+    first = TaskNode(capability="a", expected_output="a")
+    second = TaskNode(capability="b", expected_output="b", dependencies=[first.task_id])
+    first.dependencies = [second.task_id]
+    ready, blockers = _ready_task_wave(mission_with([first, second]))
+    assert ready == []
+    assert all("cycle" in reason for reason in blockers.values())
+
+
+def test_dependency_wave_propagates_failed_dependency() -> None:
+    root = TaskNode(capability="a", expected_output="a", status=TaskStatus.FAILED)
+    child = TaskNode(capability="b", expected_output="b", dependencies=[root.task_id])
+    ready, blockers = _ready_task_wave(mission_with([root, child]))
+    assert ready == []
+    assert "did not complete" in blockers[child.task_id]

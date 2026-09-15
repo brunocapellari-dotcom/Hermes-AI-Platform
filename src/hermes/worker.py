@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import httpx
-from dbos import DBOS, DBOSConfig
+from dbos import DBOS, DBOSConfig, SetWorkflowID
 
 from hermes.authorization import build_policy_engine
 from hermes.cloud_sql import close_cloud_sql_resources, cloud_sql_engine, is_cloud_sql_iam_url
@@ -39,6 +39,40 @@ def _policy() -> PolicyEngine:
         external_required=_enabled(os.getenv("HERMES_EXTERNAL_AUTHORIZATION_REQUIRED")),
         timeout=float(os.getenv("HERMES_AUTHORIZATION_TIMEOUT_SECONDS", "5")),
     )
+
+
+def _ready_task_wave(mission: Mission) -> tuple[list[TaskNode], dict[str, str]]:
+    """Return the next dependency-safe execution wave and terminal dependency errors."""
+
+    by_id = {task.task_id: task for task in mission.tasks}
+    pending = [task for task in mission.tasks if task.status == TaskStatus.PENDING]
+    blockers: dict[str, str] = {}
+    for task in pending:
+        missing = [dependency for dependency in task.dependencies if dependency not in by_id]
+        if missing:
+            blockers[task.task_id] = f"unknown task dependencies: {','.join(sorted(missing))}"
+            continue
+        failed = [
+            dependency
+            for dependency in task.dependencies
+            if by_id[dependency].status in {TaskStatus.BLOCKED, TaskStatus.FAILED}
+        ]
+        if failed:
+            blockers[task.task_id] = f"dependency did not complete: {','.join(sorted(failed))}"
+
+    if blockers:
+        return [], blockers
+
+    ready = [
+        task
+        for task in pending
+        if all(by_id[dependency].status == TaskStatus.COMPLETED for dependency in task.dependencies)
+    ]
+    if not ready and pending:
+        return [], {
+            task.task_id: "dependency cycle or unresolved dependency graph" for task in pending
+        }
+    return ready, {}
 
 
 @DBOS.step(retries_allowed=True, max_attempts=3)
@@ -167,23 +201,61 @@ def update_task_state_step(
     return mission.model_dump(mode="json")
 
 
+@DBOS.workflow(name="execute_hermes_task", max_recovery_attempts=25)
+def execute_hermes_task(
+    mission_id: str,
+    goal: str,
+    task_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Durable child workflow for one project task."""
+
+    return execute_project_task_step(mission_id, goal, task_payload)
+
+
 @DBOS.workflow(name="execute_hermes_mission", max_recovery_attempts=25)
 def execute_hermes_mission(mission_id: str) -> dict[str, Any]:
+    """Execute a task DAG in dependency-safe concurrent waves."""
+
     mission = Mission.model_validate(load_mission_step(mission_id))
-    for task in mission.tasks:
-        if task.status == TaskStatus.COMPLETED:
-            continue
-        result = execute_project_task_step(
-            mission.mission_id,
-            mission.goal,
-            task.model_dump(mode="json"),
-        )
-        mission = Mission.model_validate(
-            update_task_state_step(mission.mission_id, task.task_id, result)
-        )
-        if mission.status in {MissionStatus.BLOCKED, MissionStatus.FAILED}:
-            break
-    return mission.model_dump(mode="json")
+    if mission.status in {MissionStatus.BLOCKED, MissionStatus.FAILED, MissionStatus.COMPLETED}:
+        return mission.model_dump(mode="json")
+
+    while True:
+        ready, blockers = _ready_task_wave(mission)
+        if blockers:
+            for task_id, reason in sorted(blockers.items()):
+                mission = Mission.model_validate(
+                    update_task_state_step(
+                        mission.mission_id,
+                        task_id,
+                        {"status": "blocked", "reason": reason},
+                    )
+                )
+            return mission.model_dump(mode="json")
+        if not ready:
+            return mission.model_dump(mode="json")
+
+        running: list[tuple[TaskNode, Any]] = []
+        for task in ready:
+            child_id = f"mission-{mission.mission_id}-task-{task.task_id}"
+            with SetWorkflowID(child_id):
+                handle = DBOS.start_workflow(
+                    execute_hermes_task,
+                    mission.mission_id,
+                    mission.goal,
+                    task.model_dump(mode="json"),
+                )
+            running.append((task, handle))
+
+        results = [(task, handle.get_result()) for task, handle in running]
+        for task, result in results:
+            if not isinstance(result, dict):
+                result = {"status": "failed", "reason": "task workflow returned invalid result"}
+            mission = Mission.model_validate(
+                update_task_state_step(mission.mission_id, task.task_id, result)
+            )
+        if mission.status in {MissionStatus.BLOCKED, MissionStatus.FAILED, MissionStatus.COMPLETED}:
+            return mission.model_dump(mode="json")
 
 
 def main() -> None:
