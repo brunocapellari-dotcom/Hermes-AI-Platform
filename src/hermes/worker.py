@@ -9,7 +9,8 @@ from typing import Any, cast
 import httpx
 from dbos import DBOS, DBOSConfig
 
-from hermes.domain import Mission, MissionStatus, TaskNode, TaskStatus
+from hermes.authorization import build_policy_engine
+from hermes.domain import Mission, MissionStatus, PolicyRequest, TaskNode, TaskStatus
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.registry import RegistryKind, SqlRegistry
 
@@ -19,6 +20,23 @@ def _database() -> Database:
     if not url:
         raise RuntimeError("HERMES_DATABASE_URL is required by the durable worker")
     return Database(url)
+
+
+def _enabled(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _policy():
+    return build_policy_engine(
+        allow_external_actions=_enabled(os.getenv("HERMES_ALLOW_EXTERNAL_ACTIONS")),
+        opa_url=os.getenv("HERMES_OPA_URL"),
+        opa_policy_path=os.getenv("HERMES_OPA_POLICY_PATH", "hermes/allow"),
+        openfga_url=os.getenv("HERMES_OPENFGA_URL"),
+        openfga_store_id=os.getenv("HERMES_OPENFGA_STORE_ID"),
+        openfga_model_id=os.getenv("HERMES_OPENFGA_MODEL_ID"),
+        external_required=_enabled(os.getenv("HERMES_EXTERNAL_AUTHORIZATION_REQUIRED")),
+        timeout=float(os.getenv("HERMES_AUTHORIZATION_TIMEOUT_SECONDS", "5")),
+    )
 
 
 @DBOS.step(retries_allowed=True, max_attempts=3)
@@ -58,6 +76,21 @@ def execute_project_task_step(
         return {"status": "blocked", "reason": "project execute capability is not authorized"}
     if task.risk.value in {"high", "critical"} and task.action_type.mutating:
         return {"status": "blocked", "reason": "high-risk mutation requires owner approval"}
+
+    relation = "can_execute" if task.action_type.mutating else "can_query"
+    decision = _policy().authorize(
+        PolicyRequest(
+            actor="hermes-worker",
+            subject="hermes-worker",
+            action=f"project:{task.action_type.value}",
+            resource=f"project:{task.project}",
+            relation=relation,
+            risk=task.risk,
+            external_write=task.action_type.mutating,
+        )
+    )
+    if not decision.allowed:
+        return {"status": "blocked", "reason": decision.reason}
 
     path = "/v1/execute" if task.action_type.mutating else "/v1/query"
     headers = {
