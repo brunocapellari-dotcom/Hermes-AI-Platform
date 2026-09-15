@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any, Protocol
 
 from hermes.domain import Evidence, Mission, PolicyDecision, PolicyRequest
+from hermes.research import ResearchPackage, ResearchRequest
 
 
 class ModelGateway(Protocol):
@@ -15,11 +17,17 @@ class ProjectAdapter(Protocol):
 
     async def health(self) -> Mapping[str, Any]: ...
 
+    async def status(self) -> Mapping[str, Any]: ...
+
     async def capabilities(self) -> set[str]: ...
 
     async def query(self, capability: str, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
 
     async def execute(self, capability: str, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
+
+    async def search(self, query: str, *, limit: int = 10) -> Mapping[str, Any]: ...
+
+    async def alerts(self, *, since: datetime | None = None) -> Mapping[str, Any]: ...
 
 
 class KnowledgeProvider(Protocol):
@@ -27,7 +35,7 @@ class KnowledgeProvider(Protocol):
 
 
 class ResearchProvider(Protocol):
-    async def research(self, query: str) -> list[Evidence]: ...
+    async def research(self, request: ResearchRequest) -> ResearchPackage: ...
 
 
 class MissionStore(Protocol):

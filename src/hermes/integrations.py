@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any, cast
 
 import httpx
 
 from hermes.domain import Evidence
+from hermes.research import ResearchPackage, ResearchRequest
 
 
 def _json_object(response: httpx.Response) -> dict[str, Any]:
@@ -81,6 +83,9 @@ class HoldingClient:
     async def health(self) -> Mapping[str, Any]:
         return await self._get("/health")
 
+    async def status(self) -> Mapping[str, Any]:
+        return await self._get("/api/v1/status")
+
     async def capabilities(self) -> set[str]:
         return {"portfolio_status", "governance", "project_status", "decision_queue"}
 
@@ -95,6 +100,13 @@ class HoldingClient:
             "Hermes never mutates Holding state without an explicit authorized adapter"
         )
 
+    async def search(self, query: str, *, limit: int = 10) -> Mapping[str, Any]:
+        raise PermissionError("Holding search is not exposed through the read-only adapter")
+
+    async def alerts(self, *, since: datetime | None = None) -> Mapping[str, Any]:
+        result = await self._get("/api/v1/alerts")
+        return {"alerts": result, "since": since.isoformat() if since else None}
+
 
 class GenericProjectAdapter:
     def __init__(self, key: str, base_url: str, timeout: float = 20.0) -> None:
@@ -105,6 +117,12 @@ class GenericProjectAdapter:
     async def health(self) -> Mapping[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(f"{self.base_url}/health")
+            response.raise_for_status()
+            return _json_object(response)
+
+    async def status(self) -> Mapping[str, Any]:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(f"{self.base_url}/v1/status")
             response.raise_for_status()
             return _json_object(response)
 
@@ -140,6 +158,24 @@ class GenericProjectAdapter:
             response.raise_for_status()
             return _json_object(response)
 
+    async def search(self, query: str, *, limit: int = 10) -> Mapping[str, Any]:
+        if limit < 1 or limit > 100:
+            raise ValueError("project search limit must be between 1 and 100")
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/search",
+                json={"query": query, "limit": limit},
+            )
+            response.raise_for_status()
+            return _json_object(response)
+
+    async def alerts(self, *, since: datetime | None = None) -> Mapping[str, Any]:
+        params = {"since": since.isoformat()} if since else None
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(f"{self.base_url}/v1/alerts", params=params)
+            response.raise_for_status()
+            return _json_object(response)
+
 
 class SecondBrainClient:
     def __init__(self, base_url: str, timeout: float = 20.0) -> None:
@@ -164,12 +200,14 @@ class ResearchClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    async def research(self, query: str) -> list[Evidence]:
+    async def research(self, request: ResearchRequest) -> ResearchPackage:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(f"{self.base_url}/v1/research", json={"query": query})
+            response = await client.post(
+                f"{self.base_url}/v1/research",
+                json=request.model_dump(mode="json"),
+            )
             response.raise_for_status()
-            data = _json_object(response)
-            raw = data.get("evidence", [])
-            if not isinstance(raw, list):
-                raise ValueError("Research evidence must be a list")
-            return [Evidence.model_validate(item) for item in raw]
+            package = ResearchPackage.model_validate(_json_object(response))
+            if package.request_id != request.request_id:
+                raise ValueError("Research Package request_id does not match Research Request")
+            return package

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from hermes.cognitive import HybridIntentEngine, KnowledgeGapDetector, TaskGraphPlanner
 from hermes.contracts import AuditSink, KnowledgeProvider, MissionStore, ResearchProvider
 from hermes.domain import Mission
+from hermes.research import ResearchRequest
 from hermes.routing import ProjectRouter
 
 
@@ -34,11 +35,25 @@ class HermesOrchestrator:
         projects = self.project_router.route(intent.capabilities)
         evidence = []
         research_triggered = False
+        research_request_id: str | None = None
+        research_package_status: str | None = None
+        research_evidence_count = 0
         if self.knowledge is not None:
             evidence = await self.knowledge.search(intent.goal)
         if (intent.requires_research or not self.gaps.sufficient(evidence)) and self.research is not None:
-            evidence.extend(await self.research.research(intent.goal))
+            research_request = ResearchRequest(
+                project=projects[0] if len(projects) == 1 else None,
+                domain=intent.capabilities[0] if intent.capabilities else None,
+                question=intent.goal,
+                urgency=intent.urgency,
+                desired_output="research_package",
+            )
+            package = await self.research.research(research_request)
+            evidence.extend(package.evidence)
             research_triggered = True
+            research_request_id = research_request.request_id
+            research_package_status = package.status
+            research_evidence_count = len(package.evidence)
         tasks = self.planner.plan(intent, projects)
         mission = Mission(
             goal=intent.goal,
@@ -48,13 +63,21 @@ class HermesOrchestrator:
                 "project_routes": projects,
                 "evidence_count": len(evidence),
                 "research_triggered": research_triggered,
+                "research_request_id": research_request_id,
+                "research_package_status": research_package_status,
+                "research_evidence_count": research_evidence_count,
             },
         )
         self.mission_store.save(mission)
         self.audit.record(
             "mission.planned",
             actor,
-            {"mission_id": mission.mission_id, "goal": mission.goal, "routes": projects},
+            {
+                "mission_id": mission.mission_id,
+                "goal": mission.goal,
+                "routes": projects,
+                "research_request_id": research_request_id,
+            },
         )
         return mission
 

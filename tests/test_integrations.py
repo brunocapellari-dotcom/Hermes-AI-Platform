@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -12,6 +13,7 @@ from hermes.integrations import (
     SecondBrainClient,
     _json_object,
 )
+from hermes.research import ResearchRequest
 
 
 class FakeResponse:
@@ -66,9 +68,7 @@ def test_json_object_rejects_non_object() -> None:
 
 def test_openai_compatible_gateway_success_and_validation() -> None:
     gateway = OpenAICompatibleGateway("https://gateway.test/", api_key="secret", timeout=3)
-    FakeAsyncClient.responses = [
-        FakeResponse({"choices": [{"message": {"content": "ok"}}]})
-    ]
+    FakeAsyncClient.responses = [FakeResponse({"choices": [{"message": {"content": "ok"}}]})]
     result = asyncio.run(gateway.complete(model="m", system="s", user="u"))
     assert result == "ok"
     method, url, kwargs = FakeAsyncClient.calls[0]
@@ -93,6 +93,8 @@ def test_holding_client_read_contract_and_write_block() -> None:
     FakeAsyncClient.responses = [FakeResponse({"status": "ok"})]
     health = asyncio.run(client.health())
     assert health["status"] == "ok"
+    FakeAsyncClient.responses = [FakeResponse({"status": "healthy"})]
+    assert asyncio.run(client.status())["status"] == "healthy"
     assert "portfolio_status" in asyncio.run(client.capabilities())
 
     FakeAsyncClient.responses = [FakeResponse({"items": []})]
@@ -103,12 +105,19 @@ def test_holding_client_read_contract_and_write_block() -> None:
         asyncio.run(client.query("unknown", {}))
     with pytest.raises(PermissionError):
         asyncio.run(client.execute("mutate", {}))
+    with pytest.raises(PermissionError):
+        asyncio.run(client.search("x"))
+    FakeAsyncClient.responses = [FakeResponse({"alerts": []})]
+    assert "alerts" in asyncio.run(client.alerts())
 
 
 def test_generic_project_adapter_full_contract() -> None:
     client = GenericProjectAdapter("P", "https://project.test/", timeout=2)
     FakeAsyncClient.responses = [FakeResponse({"status": "ok"})]
     assert asyncio.run(client.health()) == {"status": "ok"}
+
+    FakeAsyncClient.responses = [FakeResponse({"state": "ready"})]
+    assert asyncio.run(client.status()) == {"state": "ready"}
 
     FakeAsyncClient.responses = [FakeResponse({"capabilities": ["a", "b"]})]
     assert asyncio.run(client.capabilities()) == {"a", "b"}
@@ -119,12 +128,27 @@ def test_generic_project_adapter_full_contract() -> None:
     FakeAsyncClient.responses = [FakeResponse({"executed": True})]
     assert asyncio.run(client.execute("a", {"x": 1})) == {"executed": True}
 
+    FakeAsyncClient.responses = [FakeResponse({"results": [{"id": 1}]})]
+    assert asyncio.run(client.search("needle", limit=5))["results"] == [{"id": 1}]
+    method, url, kwargs = FakeAsyncClient.calls[-1]
+    assert method == "POST"
+    assert url.endswith("/v1/search")
+    assert kwargs["json"] == {"query": "needle", "limit": 5}
+
+    since = datetime.now(UTC)
+    FakeAsyncClient.responses = [FakeResponse({"alerts": []})]
+    assert asyncio.run(client.alerts(since=since)) == {"alerts": []}
+    assert FakeAsyncClient.calls[-1][2]["params"] == {"since": since.isoformat()}
+
+    with pytest.raises(ValueError, match="between 1 and 100"):
+        asyncio.run(client.search("x", limit=0))
+
     FakeAsyncClient.responses = [FakeResponse({"capabilities": ["a", 2]})]
     with pytest.raises(ValueError, match="list of strings"):
         asyncio.run(client.capabilities())
 
 
-def test_second_brain_and_research_clients_validate_evidence() -> None:
+def test_second_brain_and_research_clients_validate_packages() -> None:
     evidence = {
         "claim": "x",
         "source": "s",
@@ -141,10 +165,23 @@ def test_second_brain_and_research_clients_validate_evidence() -> None:
         asyncio.run(brain.search("x"))
 
     research = ResearchClient("https://research.test", timeout=2)
-    FakeAsyncClient.responses = [FakeResponse({"evidence": [evidence]})]
-    found = asyncio.run(research.research("x"))
-    assert found[0].source == "s"
+    request = ResearchRequest(question="x", project="RESEARCH_AI")
+    FakeAsyncClient.responses = [
+        FakeResponse(
+            {
+                "request_id": request.request_id,
+                "summary": "validated",
+                "evidence": [evidence],
+                "sources": ["s"],
+                "status": "completed",
+            }
+        )
+    ]
+    package = asyncio.run(research.research(request))
+    assert package.evidence[0].source == "s"
+    assert package.summary == "validated"
+    assert FakeAsyncClient.calls[-1][2]["json"]["request_id"] == request.request_id
 
-    FakeAsyncClient.responses = [FakeResponse({"evidence": "bad"})]
-    with pytest.raises(ValueError, match="must be a list"):
-        asyncio.run(research.research("x"))
+    FakeAsyncClient.responses = [FakeResponse({"request_id": "wrong", "evidence": []})]
+    with pytest.raises(ValueError, match="request_id"):
+        asyncio.run(research.research(request))
