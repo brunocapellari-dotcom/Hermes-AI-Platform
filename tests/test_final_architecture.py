@@ -1,7 +1,6 @@
 import asyncio
 
 import httpx
-import pytest
 
 from hermes.authorization import CompositePolicyEngine, OPAClient, OpenFGAClient
 from hermes.domain import AgentSpec, PermissionSet, PolicyRequest, RiskLevel
@@ -181,7 +180,9 @@ def test_ecosystem_contracts_require_idempotency() -> None:
         {"base_url": "bad", "capabilities": [], "allow_execute": True},
     )
     assert not invalid.valid
-    coverage = validator.coverage({"AGROLOG_MT": {"base_url": "https://x", "capabilities": ["freight_analysis"]}})
+    coverage = validator.coverage(
+        {"AGROLOG_MT": {"base_url": "https://x", "capabilities": ["freight_analysis"]}}
+    )
     assert coverage["AGROLOG_MT"]
     assert not coverage["AI_HOLDING"]
 
