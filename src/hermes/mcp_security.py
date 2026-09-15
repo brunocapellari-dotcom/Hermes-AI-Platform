@@ -91,6 +91,9 @@ class MCPSecurityGateway:
     def get(self, server_id: str) -> MCPServerSpec | None:
         return self._servers.get(server_id)
 
+    def list_specs(self) -> list[MCPServerSpec]:
+        return [self._servers[key] for key in sorted(self._servers)]
+
     def admit(self, call: MCPToolCall) -> MCPAdmissionDecision:
         spec = self._servers.get(call.server_id)
         if spec is None:

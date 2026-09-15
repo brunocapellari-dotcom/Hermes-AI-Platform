@@ -1,0 +1,121 @@
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from hermes.api import create_app
+from hermes.config import Settings
+
+
+def settings(tmp_path: Path) -> Settings:
+    return Settings(
+        environment="test",
+        database_url=f"sqlite:///{tmp_path / 'super-api.db'}",
+        auto_create_schema=True,
+    )
+
+
+def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
+    app_settings = settings(tmp_path)
+    with TestClient(create_app(app_settings)) as client:
+        capabilities = client.get("/v1/capabilities").json()["capabilities"]
+        assert "adaptive_model_routing" in capabilities
+        assert "privacy_guard" in capabilities
+        assert "mcp_admission" in capabilities
+        assert "deliberation" in capabilities
+
+        privacy = client.post(
+            "/v1/security/privacy",
+            json={"content": "email user@example.com token=abcdefghijklmnop", "external": True},
+        )
+        assert privacy.status_code == 200
+        assert privacy.json()["has_secrets"] is True
+        assert privacy.json()["outbound_allowed"] is False
+        assert "user@example.com" not in privacy.json()["redacted"]
+
+        performance = client.post(
+            "/v1/models/performance",
+            json={
+                "model_id": "model-a",
+                "task_class": "REASONING",
+                "success": True,
+                "quality": 0.92,
+                "latency_ms": 300,
+                "cost_usd": 0.002,
+            },
+        )
+        assert performance.status_code == 200
+        assert performance.json()["samples"] == 1
+        assert performance.json()["quality_score"] == 0.92
+
+        registered = client.post(
+            "/v1/mcp/servers",
+            json={
+                "server_id": "research",
+                "transport": "streamable-http",
+                "endpoint": "https://research.example.com/mcp",
+                "allowed_tools": ["search"],
+                "trust": "trusted",
+                "risk": "medium",
+            },
+        )
+        assert registered.status_code == 200
+        admitted = client.post(
+            "/v1/mcp/admit",
+            json={"server_id": "research", "tool_name": "search"},
+        )
+        assert admitted.json()["allowed"] is True
+
+        rejected = client.post(
+            "/v1/mcp/servers",
+            json={
+                "server_id": "private",
+                "transport": "streamable-http",
+                "endpoint": "https://127.0.0.1/mcp",
+                "allowed_tools": ["search"],
+            },
+        )
+        assert rejected.status_code == 422
+
+        decision = client.post(
+            "/v1/deliberation/select",
+            json={
+                "candidates": [
+                    {
+                        "candidate_id": "a",
+                        "model_id": "m1",
+                        "output": "A",
+                        "confidence": 0.95,
+                        "evaluation_score": 0.95,
+                        "evidence_count": 5,
+                    },
+                    {
+                        "candidate_id": "b",
+                        "model_id": "m2",
+                        "output": "B",
+                        "confidence": 0.7,
+                        "evaluation_score": 0.7,
+                        "evidence_count": 5,
+                    },
+                ]
+            },
+        )
+        assert decision.status_code == 200
+        assert decision.json()["selected_candidate_id"] == "a"
+        assert decision.json()["quorum_met"] is True
+
+    with TestClient(create_app(app_settings)) as client:
+        servers = client.get("/v1/mcp/servers")
+        assert servers.status_code == 200
+        assert [item["server_id"] for item in servers.json()] == ["research"]
+        performance = client.post(
+            "/v1/models/performance",
+            json={
+                "model_id": "model-a",
+                "task_class": "REASONING",
+                "success": True,
+                "quality": 0.88,
+                "latency_ms": 350,
+                "cost_usd": 0.002,
+            },
+        )
+        assert performance.json()["samples"] == 2

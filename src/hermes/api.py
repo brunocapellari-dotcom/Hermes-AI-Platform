@@ -24,14 +24,17 @@ from hermes.evaluation import EvalCase, EvaluationLab, ReviewInput, ReviewPanel
 from hermes.factories import AgentAuditor, AgentFactory, SkillFactory
 from hermes.hardware import discover_hardware, recommend_local_runtime
 from hermes.integrations import OpenAICompatibleGateway, ResearchClient, SecondBrainClient
+from hermes.model_intelligence import AdaptiveModelRouter, PersistentModelIntelligence
 from hermes.multimodal import OpenAICompatibleMultimodal
 from hermes.orchestrator import HermesOrchestrator
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
+from hermes.privacy import SensitiveDataGuard
 from hermes.recovery import FailureRecoveryEngine
 from hermes.registry import PersistentModelRegistry, RegistryKind, SqlRegistry
-from hermes.routing import ModelRouter, ProjectRouter
+from hermes.routing import ProjectRouter
 from hermes.security import PromptInjectionDetector
 from hermes.self_improvement import ControlledImprovementEngine, ImprovementProposal
+from hermes.super_control import SuperControlPlane, build_super_router
 from hermes.telemetry import SqlUsageStore, prometheus_payload
 from hermes.world_state import WorldStateBuilder
 
@@ -204,11 +207,25 @@ class AppContainer:
             timeout=settings.authorization_timeout_seconds,
         )
         self.injection = PromptInjectionDetector()
-        self.model_router = ModelRouter(self.models.load())
+        self.privacy = SensitiveDataGuard()
+        self.model_intelligence = PersistentModelIntelligence(self.db)
+        self.model_router = AdaptiveModelRouter(self.models.load(), self.model_intelligence)
         self.ai = (
-            AIService(gateway=gateway, router=self.model_router, usage=self.usage)
+            AIService(
+                gateway=gateway,
+                router=self.model_router,
+                usage=self.usage,
+                privacy=self.privacy,
+                intelligence=self.model_intelligence,
+            )
             if gateway is not None
             else None
+        )
+        self.super_control = SuperControlPlane(
+            registry=self.registry,
+            audit=self.audit,
+            intelligence=self.model_intelligence,
+            privacy=self.privacy,
         )
         self.durable = (
             DBOSMissionDispatcher(
@@ -240,6 +257,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     api = FastAPI(title="Hermes AI Platform", version="0.1.0", lifespan=lifespan)
     api.state.container = container
+    api.include_router(build_super_router(container.super_control))
 
     @api.get("/health")
     def health() -> dict[str, str]:
@@ -257,7 +275,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "capabilities": [
                 "mission_planning",
                 "model_routing",
+                "adaptive_model_routing",
+                "model_performance_learning",
                 "context_routing",
+                "privacy_guard",
+                "mcp_admission",
+                "deliberation",
                 "agent_specification",
                 "agent_audit",
                 "skill_specification",
@@ -457,7 +480,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @api.post("/v1/reviews")
     def review(payload: ReviewInput) -> dict[str, Any]:
         reports = container.reviews.review(payload)
-        return {"approved": all(item.passed for item in reports), "reports": [item.model_dump() for item in reports]}
+        return {
+            "approved": all(item.passed for item in reports),
+            "reports": [item.model_dump() for item in reports],
+        }
 
     @api.post("/v1/recovery/decide")
     def recovery(payload: RecoveryRequest) -> dict[str, Any]:
