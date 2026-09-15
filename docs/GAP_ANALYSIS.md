@@ -1,32 +1,37 @@
 # Gap Analysis
 
-Status is evidence-based: EXISTE, PARCIAL, FALTA, QUEBRADO, DUPLICADO, OBSOLETO.
+Status is evidence-based: EXISTE, PARCIAL, FALTA, QUEBRADO, DUPLICADO, OBSOLETO. `EXISTE` means a tested repository implementation exists; it never means live production operation.
 
-| gap_id | area | status | priority | current evidence | acceptance test |
+| gap_id | area | status | priority | current evidence | remaining acceptance evidence |
 |---|---|---|---|---|---|
-| H-001 | repository/API foundation | EXISTE | P0 | FastAPI + CI + container + persistence | integrated CI green |
+| H-001 | repository/API foundation | EXISTE | P0 | FastAPI + CI + container + persistence | complete integrated gate on final candidate |
 | H-002 | intent/goal interpretation | PARCIAL | P0 | hybrid model/fallback engine | benchmark Portuguese intents with live models |
-| H-003 | task DAG planner | PARCIAL | P0 | deterministic dependency graph | complex mission golden set + parallel graph cases |
-| H-004 | project router | PARCIAL | P0 | capability registry | live project capability discovery |
-| H-005 | model gateway | PARCIAL | P0 | OpenAI-compatible adapter | live LiteLLM multi-provider fallback |
-| H-006 | model router/registry | PARCIAL | P0 | persistent registry + scored ranking/fallback | project benchmarks + real cost/latency telemetry |
-| H-007 | local inference | PARCIAL | P0 | hardware discovery + runtime recommendation | real local model E2E |
+| H-003 | task DAG planner | PARCIAL | P0 | deterministic dependency graph | complex mission golden set + parallel graph/live cases |
+| H-004 | project router/contracts | PARCIAL | P0 | capability routing + canonical contracts for ecosystem | live capability discovery and contract tests for every project |
+| H-005 | model gateway | PARCIAL | P0 | OpenAI-compatible gateway contract | live LiteLLM multi-provider fallback |
+| H-006 | model router/registry | PARCIAL | P0 | persistent registry + ranking/fallback | real benchmark/cost/latency telemetry |
+| H-007 | local inference | PARCIAL | P0 | hardware discovery; vLLM/llama.cpp primary candidates; SGLang benchmark | actual hardware/model E2E benchmark |
 | H-008 | Second Brain interpreter | PARCIAL | P0 | temporal Evidence contract/client | live validated/conflicting/superseded cases |
 | H-009 | Research handoff | PARCIAL | P0 | automatic gap-triggered client | live Research Package roundtrip |
-| H-010 | Tool Gateway/policy | PARCIAL | P0 | fail-closed policy + tool gate | OPA/OpenFGA identity integration |
-| H-011 | durable missions | PARCIAL | P0 | SQL checkpoints + DBOS durable dispatcher | worker crash/resume + no-duplicate external side effect |
-| H-012 | Agent Factory | PARCIAL | P1 | least-privilege specs | sandbox->benchmark->audit->registry E2E |
-| H-013 | Skill Factory | PARCIAL | P1 | versionable validated spec | promotion/rollback E2E |
-| H-014 | Cross-project intelligence | PARCIAL | P1 | relation rules | evidence-driven relation benchmark |
-| H-015 | observability/FinOps | PARCIAL | P0 | persisted usage ledger + Prometheus | OTel end-to-end trace + BigQuery export |
-| H-016 | control center | FALTA | P2 | API only | operator UI acceptance suite |
-| H-017 | Security Test Lab | PARCIAL | P0 | injection/authority tests + dependency audit | OPA/OpenFGA + egress + adversarial gateway suite |
-| H-018 | GCP production | PARCIAL | P0 | VPC/private Cloud SQL/Secret IAM/Direct VPC Terraform | plan/apply + smoke + restore drill |
-| H-019 | Holding integration | PARCIAL | P0 | canonical API known, read adapter present | authenticated live read contract |
-| H-020 | all project adapters | FALTA | P0 | adapter contract defined | each project health/capabilities/query/execute contract |
-| H-021 | World State | EXISTE | P1 | generated registry/mission/audit/usage snapshot | integrated persistence tests |
-| H-022 | Context/privacy router | PARCIAL | P0 | tenant/health/credential/project isolation rules | policy-backed production identity tests |
-| H-023 | Scenario/Hypothesis engines | EXISTE | P1 | explicit assumptions/epistemic hypothesis labels | deterministic tests |
-| H-024 | controlled self-improvement | PARCIAL | P1 | staged gates and rollback state machine | persisted A/B + independent auditor E2E |
+| H-010 | authorization/tool gateway | PARCIAL | P0 | fail-closed local policy + OPA/OpenFGA clients + Tool Gateway | live identities/policies/relationship tuples + adversarial authorization tests |
+| H-011 | durable missions | PARCIAL | P0 | SQL checkpoints + DBOS dispatcher/worker + idempotency keys | crash/resume + no-duplicate external side effect against real service |
+| H-012 | Agent Factory/Auditor | EXISTE | P1 | least-privilege spec + test/benchmark/independent-review promotion gate | live sandbox agent benchmark before any operational promotion |
+| H-013 | Skill Factory | PARCIAL | P1 | versionable validated spec | persisted promotion/rollback E2E |
+| H-014 | Cross-project intelligence | PARCIAL | P1 | relation rules | evidence-driven cross-project benchmark |
+| H-015 | observability/FinOps | PARCIAL | P0 | persisted usage ledger + Prometheus + DBOS OTel support | OTel E2E trace + BigQuery export |
+| H-016 | Control Center | PARCIAL | P2 | backend world-state/daily-intelligence/project-contract snapshot | operator UI only if it adds value without duplicating Holding PMO |
+| H-017 | Security Test Lab | PARCIAL | P0 | injection/authority tests + dependency audit + fail-closed auth | live Promptfoo/Garak/adversarial MCP-egress-gateway suite |
+| H-018 | GCP production readiness | PARCIAL | P0 | VPC/private Cloud SQL/Secret IAM/Direct VPC Terraform + Alembic migration path | plan/apply + secrets + migration + smoke + restore/rollback drill |
+| H-019 | Holding integration | PARCIAL | P0 | read adapter and boundary contract | authenticated live read contract |
+| H-020 | all project adapters | PARCIAL | P0 | canonical 12-project contract/validator + generic adapter | every project passes health/capabilities/query and authorized execute/idempotency tests where applicable |
+| H-021 | World State | EXISTE | P1 | registry/mission/audit/usage snapshot | keep regression coverage in integrated gate |
+| H-022 | Context/privacy router | PARCIAL | P0 | tenant/health/credential/project isolation | production identity and external policy tests |
+| H-023 | Scenario/Hypothesis engines | EXISTE | P1 | explicit assumptions/epistemic labels | keep deterministic regression tests |
+| H-024 | controlled self-improvement | PARCIAL | P1 | staged gates + rollback state machine | persisted A/B + independent auditor live E2E |
+| H-025 | Evaluation/Critic/Judge/Auditor | EXISTE | P1 | deterministic evaluation and independent review panel | live model judge may supplement but never replace deterministic gates |
+| H-026 | Failure Recovery Engine | EXISTE | P1 | explicit failure classes/retry/fallback/human policies | integrate measured live failure telemetry |
+| H-027 | proactive intelligence | EXISTE | P1 | read-only Daily Intelligence from World State | recurring delivery only after live deployment and owner-authorized scheduling |
+| H-028 | multimodal adapters | PARCIAL | P1 | OpenAI-compatible embeddings/vision/STT/TTS/rerank adapters | configure and benchmark real models/providers |
+| H-029 | database migrations | EXISTE | P0 | Alembic versioned initial schema + CI empty-db upgrade gate | execute controlled migration against Cloud SQL staging/production |
 
-No row may become COMPLETED/operational without its acceptance evidence. `EXISTE` means a tested implementation exists in the repository; it does not mean the full Hermes platform is production-operational.
+No row may become production-operational without its acceptance evidence. Repository implementation and live operational evidence are deliberately separate so the project cannot self-report completion from code existence alone.
