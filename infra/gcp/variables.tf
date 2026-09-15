@@ -17,6 +17,12 @@ variable "service_name" {
   default = "hermes-ai-platform"
 }
 
+variable "service_auth_audience" {
+  description = "Stable custom OIDC audience for service-to-service Hermes calls."
+  type        = string
+  default     = "https://hermes.internal"
+}
+
 variable "container_image" {
   type = string
 }

@@ -156,6 +156,7 @@ resource "google_cloud_run_v2_service" "hermes" {
   name                = var.service_name
   location            = var.region
   deletion_protection = true
+  custom_audiences    = [var.service_auth_audience]
 
   template {
     service_account = google_service_account.hermes.email
@@ -175,6 +176,16 @@ resource "google_cloud_run_v2_service" "hermes" {
       env {
         name  = "HERMES_AUTO_CREATE_SCHEMA"
         value = "false"
+      }
+
+      env {
+        name  = "HERMES_SERVICE_AUTH_REQUIRED"
+        value = "true"
+      }
+
+      env {
+        name  = "HERMES_SERVICE_AUTH_AUDIENCE"
+        value = var.service_auth_audience
       }
 
       env {

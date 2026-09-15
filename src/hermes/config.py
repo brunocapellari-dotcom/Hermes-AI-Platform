@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     dbos_system_database_url: str | None = None
     dbos_application_name: str = "hermes-worker"
     dbos_queue_name: str = "hermes-missions"
+    service_auth_required: bool = False
+    service_auth_audience: str | None = None
     model_gateway_url: str | None = None
     model_gateway_api_key: SecretStr | None = None
     default_model: str | None = None

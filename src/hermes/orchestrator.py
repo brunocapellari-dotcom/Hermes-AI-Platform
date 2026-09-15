@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from hermes.auth import authenticated_actor
 from hermes.cognitive import HybridIntentEngine, KnowledgeGapDetector, TaskGraphPlanner
 from hermes.contracts import AuditSink, KnowledgeProvider, MissionStore, ResearchProvider
 from hermes.domain import Mission
@@ -31,6 +32,7 @@ class HermesOrchestrator:
         self.gaps = KnowledgeGapDetector()
 
     async def create_mission(self, request: str, *, actor: str = "owner") -> Mission:
+        actor = authenticated_actor(actor) or actor
         intent = await self.intent_engine.analyze(request)
         projects = self.project_router.route(intent.capabilities)
         evidence = []

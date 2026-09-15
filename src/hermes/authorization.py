@@ -4,6 +4,7 @@ from typing import Any, cast
 
 import httpx
 
+from hermes.auth import authenticated_actor
 from hermes.domain import PolicyDecision, PolicyRequest
 from hermes.security import DefaultPolicyEngine, PolicyEngine
 
@@ -109,6 +110,9 @@ class CompositePolicyEngine:
         self.external_required = external_required
 
     def authorize(self, request: PolicyRequest) -> PolicyDecision:
+        identity_actor = authenticated_actor()
+        if identity_actor:
+            request = request.model_copy(update={"actor": identity_actor, "subject": identity_actor})
         local_decision = self.local.authorize(request)
         if not local_decision.allowed:
             return local_decision
