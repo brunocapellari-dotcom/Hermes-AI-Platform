@@ -3,7 +3,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from hermes.contracts import ModelGateway
+from hermes.budget import BudgetGuard
+from hermes.contracts import MeteredModelGateway, ModelGateway
 from hermes.domain import ModelClass, ModelProfile, ModelRouteRequest, RouteDecision
 from hermes.model_intelligence import ModelIntelligence, ModelPerformanceSample
 from hermes.privacy import SensitiveDataGuard
@@ -28,6 +29,7 @@ class AIService:
         breaker: CircuitBreaker | None = None,
         privacy: SensitiveDataGuard | None = None,
         intelligence: ModelIntelligence | None = None,
+        budget: BudgetGuard | None = None,
     ) -> None:
         self.gateway = gateway
         self.router = router
@@ -35,6 +37,7 @@ class AIService:
         self.breaker = breaker or CircuitBreaker()
         self.privacy = privacy
         self.intelligence = intelligence
+        self.budget = budget or BudgetGuard(usage)
 
     @staticmethod
     def _task_class(request: ModelRouteRequest) -> ModelClass:
@@ -53,6 +56,14 @@ class AIService:
         if request.required_classes:
             return sorted(request.required_classes, key=lambda item: item.value)[0]
         return ModelClass.ROUTINE
+
+    @staticmethod
+    def _cost(profile: ModelProfile, input_tokens: int, output_tokens: int) -> float:
+        cost = (
+            (input_tokens / 1_000_000) * profile.input_cost_per_million
+            + (output_tokens / 1_000_000) * profile.output_cost_per_million
+        )
+        return round(cost, 8)
 
     def _learn(
         self,
@@ -92,9 +103,14 @@ class AIService:
         profiles: dict[str, ModelProfile] = {model.model_id: model for model in self.router.models}
         attempts = 0
         last_error: Exception | None = None
+        budget_denied = False
         task_class = self._task_class(request)
         for route in ranked:
             profile = profiles[route.model_id]
+            budget_decision = self.budget.check(project, profile)
+            if not budget_decision.allowed:
+                budget_denied = True
+                continue
             if not self.breaker.available(profile.model_id):
                 continue
             attempts += 1
@@ -128,12 +144,24 @@ class AIService:
                     continue
                 outbound_system = system_scan.redacted
                 outbound_user = user_scan.redacted
+            input_tokens = 0
+            output_tokens = 0
             try:
-                content = await self.gateway.complete(
-                    model=profile.model,
-                    system=outbound_system,
-                    user=outbound_user,
-                )
+                if isinstance(self.gateway, MeteredModelGateway):
+                    completion = await self.gateway.complete_metered(
+                        model=profile.model,
+                        system=outbound_system,
+                        user=outbound_user,
+                    )
+                    content = completion.content
+                    input_tokens = completion.input_tokens
+                    output_tokens = completion.output_tokens
+                else:
+                    content = await self.gateway.complete(
+                        model=profile.model,
+                        system=outbound_system,
+                        user=outbound_user,
+                    )
             except Exception as exc:
                 self.breaker.record_failure(profile.model_id)
                 last_error = exc
@@ -160,6 +188,7 @@ class AIService:
                 continue
             self.breaker.record_success(profile.model_id)
             latency_ms = (time.perf_counter() - started) * 1000
+            cost_usd = self._cost(profile, input_tokens, output_tokens)
             self.usage.record(
                 UsageEvent(
                     mission_id=mission_id,
@@ -168,6 +197,9 @@ class AIService:
                     provider=profile.provider,
                     operation="generate",
                     latency_ms=latency_ms,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost_usd=cost_usd,
                     success=True,
                 )
             )
@@ -177,8 +209,11 @@ class AIService:
                 success=True,
                 quality=0.5,
                 latency_ms=latency_ms,
+                cost_usd=cost_usd,
             )
             return AIResult(content=content, route=route, attempts=attempts)
         if last_error is not None:
             raise RuntimeError("all eligible model attempts failed") from last_error
+        if budget_denied:
+            raise RuntimeError("all eligible paid model routes are denied by budget policy")
         raise RuntimeError("all eligible models are temporarily unavailable")
