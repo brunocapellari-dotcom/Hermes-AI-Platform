@@ -80,7 +80,13 @@ class AppContainer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.db = Database(settings.database_url)
-        if settings.auto_create_schema or not settings.is_production:
+        # SQLite is strictly a local/test fallback and has no external migration plane.
+        # Managed production databases keep schema creation explicit.
+        if (
+            settings.auto_create_schema
+            or not settings.is_production
+            or settings.database_url.startswith("sqlite")
+        ):
             self.db.create_schema()
         self.mission_store = SqlMissionStore(self.db)
         self.audit = SqlAuditSink(self.db)
