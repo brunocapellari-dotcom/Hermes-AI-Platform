@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pydantic import ValidationError
 
 from hermes.contracts import ModelGateway
-from hermes.domain import Evidence, Intent, KnowledgeStatus, RiskLevel, TaskNode
+from hermes.domain import ActionType, Evidence, Intent, KnowledgeStatus, RiskLevel, TaskNode
 
 
 CAPABILITY_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
@@ -26,11 +26,7 @@ CAPABILITY_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
 
 
 class HybridIntentEngine:
-    """Model-assisted intent extraction with deterministic fallback.
-
-    The fallback is deliberately conservative; routing never relies exclusively on keywords when a
-    model gateway is available.
-    """
+    """Model-assisted intent extraction with a conservative deterministic fallback."""
 
     def __init__(self, gateway: ModelGateway | None = None, model: str | None = None) -> None:
         self.gateway = gateway
@@ -43,8 +39,9 @@ class HybridIntentEngine:
                     model=self.model,
                     system=(
                         "Classify the owner's request for Hermes. Return JSON only with keys: "
-                        "explicit_request, goal, capabilities, probable_projects, urgency, risk, "
-                        "requires_external_action, requires_research, private_only. "
+                        "explicit_request, goal, capabilities, probable_projects, action_type, "
+                        "urgency, risk, requires_external_action, requires_research, private_only. "
+                        "action_type must be query|analyze|research|create|execute|update|delete; "
                         "risk must be low|medium|high|critical. Never grant authority."
                     ),
                     user=text,
@@ -53,6 +50,22 @@ class HybridIntentEngine:
             except (json.JSONDecodeError, ValidationError, RuntimeError, ValueError):
                 pass
         return self._fallback(text)
+
+    @staticmethod
+    def _action_type(text: str, capabilities: list[str]) -> ActionType:
+        if re.search(r"apague|delete|remova|exclua", text, re.I):
+            return ActionType.DELETE
+        if re.search(r"atualize|altere|corrija|edite|modifique", text, re.I):
+            return ActionType.UPDATE
+        if re.search(r"crie|gere|construa|monte|transforme|faça um|faca um", text, re.I):
+            return ActionType.CREATE
+        if re.search(r"envie|publique|execute|rode|compre|pague", text, re.I):
+            return ActionType.EXECUTE
+        if "research" in capabilities or re.search(r"pesquis|busque|procure", text, re.I):
+            return ActionType.RESEARCH
+        if re.search(r"como está|como esta|status|mostre|veja|liste|qual", text, re.I):
+            return ActionType.QUERY
+        return ActionType.ANALYZE
 
     @staticmethod
     def _fallback(text: str) -> Intent:
@@ -66,10 +79,15 @@ class HybridIntentEngine:
                     projects.append(project)
 
         private_only = bool(re.search(r"apenas ia local|somente local|offline|privad", text, re.I))
-        external = bool(re.search(r"envie|publique|compre|pague|execute em produção|delete|apague", text, re.I))
+        action_type = HybridIntentEngine._action_type(text, capabilities)
+        external = bool(
+            re.search(r"envie|publique|compre|pague|produção|producao|extern", text, re.I)
+        )
         high_risk = bool(re.search(r"dinheiro real|contrato|juríd|credencial|produção", text, re.I))
         risk = RiskLevel.HIGH if high_risk else RiskLevel.MEDIUM if external else RiskLevel.LOW
-        requires_research = "research" in capabilities or bool(re.search(r"atual|melhor|novo|recent", text, re.I))
+        requires_research = action_type == ActionType.RESEARCH or bool(
+            re.search(r"atual|melhor|novo|recent", text, re.I)
+        )
         if not capabilities:
             capabilities = ["general_reasoning"]
         return Intent(
@@ -77,6 +95,7 @@ class HybridIntentEngine:
             goal=text.strip(),
             capabilities=capabilities,
             probable_projects=projects,
+            action_type=action_type,
             urgency=1,
             risk=risk,
             requires_external_action=external,
@@ -94,6 +113,7 @@ class TaskGraphPlanner:
             node = TaskNode(
                 capability=capability,
                 project=project,
+                action_type=intent.action_type,
                 dependencies=[previous] if previous else [],
                 expected_output=f"validated output for {capability}",
                 risk=intent.risk,
@@ -107,8 +127,9 @@ class KnowledgeGapDetector:
     accepted = {KnowledgeStatus.VALIDATED, KnowledgeStatus.CANONICAL}
 
     def sufficient(self, evidence: Iterable[Evidence], *, minimum: int = 1) -> bool:
-        usable = [e for e in evidence if e.status in self.accepted and e.confidence >= 0.6]
-        if any(e.status == KnowledgeStatus.CONFLICTING for e in evidence):
+        items = list(evidence)
+        usable = [e for e in items if e.status in self.accepted and e.confidence >= 0.6]
+        if any(e.status == KnowledgeStatus.CONFLICTING for e in items):
             return False
         now = datetime.now(UTC)
         current = [e for e in usable if e.valid_to is None or e.valid_to >= now]

@@ -15,6 +15,18 @@ def _json_object(response: httpx.Response) -> dict[str, Any]:
     return cast(dict[str, Any], payload)
 
 
+def _hermes_headers(payload: Mapping[str, Any]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    mission_id = payload.get("mission_id")
+    task_id = payload.get("task_id")
+    if isinstance(mission_id, str):
+        headers["X-Hermes-Mission-ID"] = mission_id
+    if isinstance(task_id, str):
+        headers["X-Hermes-Task-ID"] = task_id
+        headers["Idempotency-Key"] = task_id
+    return headers
+
+
 class OpenAICompatibleGateway:
     def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 20.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -112,6 +124,7 @@ class GenericProjectAdapter:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/query",
+                headers=_hermes_headers(payload),
                 json={"capability": capability, "payload": dict(payload)},
             )
             response.raise_for_status()
@@ -121,6 +134,7 @@ class GenericProjectAdapter:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/execute",
+                headers=_hermes_headers(payload),
                 json={"capability": capability, "payload": dict(payload)},
             )
             response.raise_for_status()

@@ -37,6 +37,20 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
 
 
+class ActionType(StrEnum):
+    QUERY = "query"
+    ANALYZE = "analyze"
+    RESEARCH = "research"
+    CREATE = "create"
+    EXECUTE = "execute"
+    UPDATE = "update"
+    DELETE = "delete"
+
+    @property
+    def mutating(self) -> bool:
+        return self in {self.CREATE, self.EXECUTE, self.UPDATE, self.DELETE}
+
+
 class KnowledgeStatus(StrEnum):
     PROPOSED = "PROPOSTO"
     IN_REVIEW = "EM_REVISÃO"
@@ -70,6 +84,7 @@ class Intent(BaseModel):
     goal: str
     capabilities: list[str] = Field(default_factory=list)
     probable_projects: list[str] = Field(default_factory=list)
+    action_type: ActionType = ActionType.ANALYZE
     urgency: int = Field(default=1, ge=1, le=5)
     risk: RiskLevel = RiskLevel.LOW
     requires_external_action: bool = False
@@ -81,6 +96,7 @@ class TaskNode(BaseModel):
     task_id: str = Field(default_factory=lambda: uuid4().hex)
     capability: str
     project: str | None = None
+    action_type: ActionType = ActionType.ANALYZE
     dependencies: list[str] = Field(default_factory=list)
     expected_output: str
     risk: RiskLevel = RiskLevel.LOW
