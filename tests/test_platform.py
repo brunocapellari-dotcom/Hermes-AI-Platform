@@ -6,7 +6,7 @@ import pytest
 from hermes.ai_core import AIService
 from hermes.context import ContextItem, ContextRouter, DataClass
 from hermes.decision import HypothesisEngine, ScenarioEngine, ScenarioOption
-from hermes.domain import ModelClass, ModelProfile, ModelRouteRequest, TrustLevel
+from hermes.domain import ModelClass, ModelProfile, ModelRouteRequest
 from hermes.durable import DBOSMissionDispatcher
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.registry import PersistentModelRegistry, RegistryKind, SqlRegistry
