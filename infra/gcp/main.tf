@@ -189,6 +189,11 @@ resource "google_cloud_run_v2_service" "hermes" {
       }
 
       env {
+        name  = "HERMES_SERVICE_TO_SERVICE_AUTH"
+        value = "true"
+      }
+
+      env {
         name  = "HERMES_DATABASE_URL"
         value = "cloudsql+iam:///hermes"
       }
