@@ -37,8 +37,8 @@ class ModelRouter:
     def __init__(self, models: list[ModelProfile] | None = None) -> None:
         self.models = models or []
 
-    def route(self, request: ModelRouteRequest) -> RouteDecision:
-        candidates: list[tuple[float, ModelProfile, list[str]]] = []
+    def rank(self, request: ModelRouteRequest) -> list[RouteDecision]:
+        candidates: list[RouteDecision] = []
         for model in self.models:
             reasons: list[str] = []
             if not model.available:
@@ -62,11 +62,16 @@ class ModelRouter:
             reasons.append("meets required capabilities")
             if model.local:
                 reasons.append("local runtime")
-            candidates.append((score, model, reasons))
-        if not candidates:
+            candidates.append(
+                RouteDecision(model_id=model.model_id, score=round(score, 4), reasons=reasons)
+            )
+        return sorted(candidates, key=lambda item: item.score, reverse=True)
+
+    def route(self, request: ModelRouteRequest) -> RouteDecision:
+        ranked = self.rank(request)
+        if not ranked:
             raise LookupError("no eligible model for routing request")
-        score, model, reasons = max(candidates, key=lambda item: item[0])
-        return RouteDecision(model_id=model.model_id, score=round(score, 4), reasons=reasons)
+        return ranked[0]
 
 
 @dataclass

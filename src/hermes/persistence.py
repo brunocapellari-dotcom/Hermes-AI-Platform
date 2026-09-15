@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, String, Text, create_engine, select
+from sqlalchemy import DateTime, Float, String, Text, create_engine, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from hermes.domain import Mission
@@ -33,6 +33,39 @@ class AuditRow(Base):
     payload: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class RegistryRow(Base):
+    __tablename__ = "hermes_registry"
+
+    kind: Mapped[str] = mapped_column(String(40), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    status: Mapped[str] = mapped_column(String(40), index=True, default="active")
+    payload: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+
+
+class UsageRow(Base):
+    __tablename__ = "hermes_usage_events"
+
+    event_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    mission_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    project: Mapped[str | None] = mapped_column(String(120), index=True)
+    agent: Mapped[str | None] = mapped_column(String(120), index=True)
+    model_id: Mapped[str | None] = mapped_column(String(160), index=True)
+    provider: Mapped[str | None] = mapped_column(String(120), index=True)
+    operation: Mapped[str] = mapped_column(String(80), index=True)
+    latency_ms: Mapped[float] = mapped_column(Float, default=0)
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0)
+    success: Mapped[bool] = mapped_column(default=True, index=True)
+    error_type: Mapped[str | None] = mapped_column(String(160), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
     )
 
 
@@ -75,6 +108,13 @@ class SqlMissionStore:
             row = session.scalar(select(MissionRow).where(MissionRow.mission_id == mission_id))
             return Mission.model_validate_json(row.payload) if row else None
 
+    def status_counts(self) -> dict[str, int]:
+        with self.db.sessions() as session:
+            rows = session.execute(
+                select(MissionRow.status, func.count()).group_by(MissionRow.status)
+            ).all()
+            return {str(status): int(count) for status, count in rows}
+
 
 class SqlAuditSink:
     def __init__(self, db: Database) -> None:
@@ -93,4 +133,5 @@ class SqlAuditSink:
 
     def count(self) -> int:
         with self.db.sessions() as session:
-            return len(session.scalars(select(AuditRow)).all())
+            value = session.scalar(select(func.count()).select_from(AuditRow))
+            return int(value or 0)

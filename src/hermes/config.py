@@ -11,6 +11,9 @@ class Settings(BaseSettings):
 
     environment: str = "production"
     database_url: str = "sqlite:///./hermes.db"
+    dbos_system_database_url: str | None = None
+    dbos_application_name: str = "hermes-worker"
+    dbos_queue_name: str = "hermes-missions"
     model_gateway_url: str | None = None
     model_gateway_api_key: SecretStr | None = None
     default_model: str | None = None
