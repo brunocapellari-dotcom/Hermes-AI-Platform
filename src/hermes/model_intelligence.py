@@ -5,8 +5,10 @@ from collections import defaultdict, deque
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from hermes.domain import ModelClass, ModelProfile, ModelRouteRequest, RouteDecision
+from hermes.persistence import Database, ModelPerformanceRow
 from hermes.routing import ModelRouter
 
 
@@ -72,7 +74,10 @@ class ModelIntelligence:
 
         weighted: list[tuple[ModelPerformanceSample, float]] = []
         for sample in selected:
-            age_hours = max((now - sample.observed_at).total_seconds() / 3600.0, 0.0)
+            observed_at = sample.observed_at
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=UTC)
+            age_hours = max((now - observed_at).total_seconds() / 3600.0, 0.0)
             weight = math.pow(0.5, age_hours / self.half_life_hours)
             weighted.append((sample, weight))
         total_weight = sum(weight for _, weight in weighted) or 1.0
@@ -123,6 +128,55 @@ class ModelIntelligence:
                 "benchmark_score": round(benchmark, 4),
             }
         )
+
+
+class PersistentModelIntelligence(ModelIntelligence):
+    def __init__(
+        self,
+        db: Database,
+        max_samples_per_model: int = 500,
+        half_life_hours: float = 168.0,
+    ) -> None:
+        self.db = db
+        super().__init__(max_samples_per_model, half_life_hours)
+        self._hydrate()
+
+    def _hydrate(self) -> None:
+        with self.db.sessions() as session:
+            rows = session.scalars(
+                select(ModelPerformanceRow).order_by(ModelPerformanceRow.observed_at.asc())
+            ).all()
+        for row in rows:
+            observed_at = row.observed_at
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=UTC)
+            super().record(
+                ModelPerformanceSample(
+                    model_id=row.model_id,
+                    task_class=ModelClass(row.task_class),
+                    success=row.success,
+                    quality=row.quality,
+                    latency_ms=row.latency_ms,
+                    cost_usd=row.cost_usd,
+                    observed_at=observed_at,
+                )
+            )
+
+    def record(self, sample: ModelPerformanceSample) -> None:
+        with self.db.sessions() as session:
+            session.add(
+                ModelPerformanceRow(
+                    model_id=sample.model_id,
+                    task_class=sample.task_class.value,
+                    success=sample.success,
+                    quality=sample.quality,
+                    latency_ms=sample.latency_ms,
+                    cost_usd=sample.cost_usd,
+                    observed_at=sample.observed_at,
+                )
+            )
+            session.commit()
+        super().record(sample)
 
 
 class AdaptiveModelRouter(ModelRouter):

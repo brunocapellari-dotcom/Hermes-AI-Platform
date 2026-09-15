@@ -69,6 +69,19 @@ class UsageRow(Base):
     )
 
 
+class ModelPerformanceRow(Base):
+    __tablename__ = "hermes_model_performance"
+
+    event_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    model_id: Mapped[str] = mapped_column(String(160), index=True)
+    task_class: Mapped[str] = mapped_column(String(80), index=True)
+    success: Mapped[bool] = mapped_column(default=True, index=True)
+    quality: Mapped[float] = mapped_column(Float)
+    latency_ms: Mapped[float] = mapped_column(Float, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class Database:
     def __init__(self, url: str) -> None:
         kwargs: dict[str, Any] = {"pool_pre_ping": True}
