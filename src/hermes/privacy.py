@@ -11,8 +11,8 @@ class SensitiveKind(StrEnum):
     PHONE = "phone"
     CPF = "cpf"
     CNPJ = "cnpj"
-    BEARER_TOKEN = "bearer_token"  # noqa: S105  # nosec B105 - enum label only
-    API_SECRET = "api_secret"  # noqa: S105  # nosec B105 - enum label only
+    BEARER_TOKEN = "bearer_token"  # noqa: S105  # nosec B105
+    API_SECRET = "api_secret"  # noqa: S105  # nosec B105
 
 
 class SensitiveFinding(BaseModel):
