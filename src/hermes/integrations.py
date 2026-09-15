@@ -7,6 +7,7 @@ from typing import Any, cast
 import httpx
 
 from hermes.auth import outbound_service_auth_enabled, service_identity_headers
+from hermes.contracts import CompletionResult
 from hermes.domain import Evidence
 from hermes.research import ResearchPackage, ResearchRequest
 
@@ -36,13 +37,42 @@ def _service_headers(base_url: str, audience: str | None = None) -> dict[str, st
     return service_identity_headers(audience or base_url)
 
 
+def _completion_result(data: Mapping[str, Any]) -> CompletionResult:
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("model gateway returned no choices")
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise ValueError("model gateway returned invalid choice")
+    message = first.get("message")
+    if not isinstance(message, dict):
+        raise ValueError("model gateway returned invalid message")
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise ValueError("model gateway returned non-text content")
+    usage = data.get("usage", {})
+    if usage is None:
+        usage = {}
+    if not isinstance(usage, dict):
+        raise ValueError("model gateway returned invalid usage")
+    input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+    output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
+    if not isinstance(input_tokens, int) or not isinstance(output_tokens, int):
+        raise ValueError("model gateway token usage must be integers")
+    return CompletionResult(
+        content=content,
+        input_tokens=max(input_tokens, 0),
+        output_tokens=max(output_tokens, 0),
+    )
+
+
 class OpenAICompatibleGateway:
     def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 20.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
 
-    async def complete(self, *, model: str, system: str, user: str) -> str:
+    async def complete_metered(self, *, model: str, system: str, user: str) -> CompletionResult:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
@@ -58,20 +88,10 @@ class OpenAICompatibleGateway:
                 },
             )
             response.raise_for_status()
-            data = _json_object(response)
-            choices = data.get("choices")
-            if not isinstance(choices, list) or not choices:
-                raise ValueError("model gateway returned no choices")
-            first = choices[0]
-            if not isinstance(first, dict):
-                raise ValueError("model gateway returned invalid choice")
-            message = first.get("message")
-            if not isinstance(message, dict):
-                raise ValueError("model gateway returned invalid message")
-            content = message.get("content")
-            if not isinstance(content, str):
-                raise ValueError("model gateway returned non-text content")
-            return content
+            return _completion_result(_json_object(response))
+
+    async def complete(self, *, model: str, system: str, user: str) -> str:
+        return (await self.complete_metered(model=model, system=system, user=user)).content
 
 
 class HoldingClient:
