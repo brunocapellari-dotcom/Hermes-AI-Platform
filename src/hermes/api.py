@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -9,20 +11,26 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from hermes.ai_core import AIService
+from hermes.authorization import build_policy_engine
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
 from hermes.config import Settings, get_settings
 from hermes.context import ContextItem, ContextRouter
+from hermes.control_center import ControlCenter
 from hermes.decision import HypothesisEngine, ScenarioEngine, ScenarioOption
-from hermes.domain import ModelClass, ModelRouteRequest, PolicyRequest, TrustLevel
+from hermes.domain import AgentSpec, ModelClass, ModelRouteRequest, PolicyRequest, TrustLevel
 from hermes.durable import DBOSMissionDispatcher
-from hermes.factories import AgentFactory, SkillFactory
+from hermes.ecosystem import CANONICAL_PROJECTS, ProjectContractValidator
+from hermes.evaluation import EvalCase, EvaluationLab, ReviewInput, ReviewPanel
+from hermes.factories import AgentAuditor, AgentFactory, SkillFactory
 from hermes.hardware import discover_hardware, recommend_local_runtime
 from hermes.integrations import OpenAICompatibleGateway, ResearchClient, SecondBrainClient
+from hermes.multimodal import OpenAICompatibleMultimodal
 from hermes.orchestrator import HermesOrchestrator
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
-from hermes.registry import PersistentModelRegistry, SqlRegistry
+from hermes.recovery import FailureRecoveryEngine
+from hermes.registry import PersistentModelRegistry, RegistryKind, SqlRegistry
 from hermes.routing import ModelRouter, ProjectRouter
-from hermes.security import DefaultPolicyEngine, PromptInjectionDetector
+from hermes.security import PromptInjectionDetector
 from hermes.self_improvement import ControlledImprovementEngine, ImprovementProposal
 from hermes.telemetry import SqlUsageStore, prometheus_payload
 from hermes.world_state import WorldStateBuilder
@@ -43,6 +51,14 @@ class AgentCreateSpec(BaseModel):
     project: str
     mission: str
     read_scopes: list[str] = Field(default_factory=list)
+
+
+class AgentAuditRequest(BaseModel):
+    spec: AgentSpec
+    tests_passed: bool
+    benchmark_passed: bool
+    independent_review_passed: bool
+    external_action_approved: bool = False
 
 
 class SkillCreateSpec(BaseModel):
@@ -76,12 +92,50 @@ class GenerateRequest(BaseModel):
     project: str | None = None
 
 
+class EmbedRequest(BaseModel):
+    inputs: list[str] = Field(min_length=1, max_length=256)
+
+
+class VisionRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=20_000)
+    image_url: str = Field(min_length=1, max_length=2_000_000)
+
+
+class TranscriptionRequest(BaseModel):
+    audio_base64: str = Field(min_length=1, max_length=50_000_000)
+    filename: str = Field(default="audio.bin", max_length=200)
+
+
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=100_000)
+    voice: str = Field(default="alloy", min_length=1, max_length=100)
+
+
+class RerankRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=20_000)
+    documents: list[str] = Field(min_length=1, max_length=256)
+
+
+class EvalScoreRequest(BaseModel):
+    case: EvalCase
+    output: str
+
+
+class RecoveryRequest(BaseModel):
+    error_type: str = ""
+    status_code: int | None = Field(default=None, ge=100, le=599)
+
+
+class ProjectRegistrationRequest(BaseModel):
+    key: str
+    registration: dict[str, Any]
+    persist: bool = False
+
+
 class AppContainer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.db = Database(settings.database_url)
-        # SQLite is strictly a local/test fallback and has no external migration plane.
-        # Managed production databases keep schema creation explicit.
         if (
             settings.auto_create_schema
             or not settings.is_production
@@ -96,18 +150,30 @@ class AppContainer:
         self.world_state = WorldStateBuilder(
             self.registry, self.mission_store, self.audit, self.usage
         )
-        gateway = None
+        self.control_center = ControlCenter(self.world_state, self.registry)
         api_key = (
             settings.model_gateway_api_key.get_secret_value()
             if settings.model_gateway_api_key
             else None
         )
-        if settings.model_gateway_url:
-            gateway = OpenAICompatibleGateway(
+        gateway = (
+            OpenAICompatibleGateway(
                 settings.model_gateway_url,
                 api_key=api_key,
                 timeout=settings.request_timeout_seconds,
             )
+            if settings.model_gateway_url
+            else None
+        )
+        self.multimodal = (
+            OpenAICompatibleMultimodal(
+                settings.model_gateway_url,
+                api_key=api_key,
+                timeout=settings.request_timeout_seconds,
+            )
+            if settings.model_gateway_url
+            else None
+        )
         knowledge = (
             SecondBrainClient(settings.second_brain_url, settings.request_timeout_seconds)
             if settings.second_brain_url
@@ -127,7 +193,16 @@ class AppContainer:
             knowledge=knowledge,
             research=research,
         )
-        self.policy = DefaultPolicyEngine(allow_external_actions=settings.allow_external_actions)
+        self.policy = build_policy_engine(
+            allow_external_actions=settings.allow_external_actions,
+            opa_url=settings.opa_url,
+            opa_policy_path=settings.opa_policy_path,
+            openfga_url=settings.openfga_url,
+            openfga_store_id=settings.openfga_store_id,
+            openfga_model_id=settings.openfga_model_id,
+            external_required=settings.external_authorization_required,
+            timeout=settings.authorization_timeout_seconds,
+        )
         self.injection = PromptInjectionDetector()
         self.model_router = ModelRouter(self.models.load())
         self.ai = (
@@ -148,6 +223,11 @@ class AppContainer:
         self.scenarios = ScenarioEngine()
         self.hypotheses = HypothesisEngine()
         self.improvements = ControlledImprovementEngine()
+        self.evaluation = EvaluationLab()
+        self.reviews = ReviewPanel()
+        self.recovery = FailureRecoveryEngine()
+        self.agent_auditor = AgentAuditor()
+        self.project_validator = ProjectContractValidator()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -179,13 +259,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "model_routing",
                 "context_routing",
                 "agent_specification",
+                "agent_audit",
                 "skill_specification",
                 "scenario_comparison",
                 "hypothesis_creation",
+                "evaluation",
+                "recovery",
                 "world_state",
+                "control_center",
+                "project_contract_validation",
+                "embedding",
+                "vision",
+                "speech_to_text",
+                "text_to_speech",
+                "rerank",
             ],
             "ai_generation_configured": container.ai is not None,
+            "multimodal_configured": container.multimodal is not None,
             "durable_dispatch_configured": container.durable is not None,
+            "external_authorization_required": settings.external_authorization_required,
         }
 
     @api.post("/v1/missions")
@@ -252,21 +344,54 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "attempts": result.attempts,
         }
 
-    @api.post("/v1/embed", status_code=503)
-    def embed_unconfigured() -> dict[str, str]:
-        return {"status": "unconfigured", "detail": "embedding service adapter not configured"}
+    @api.post("/v1/embed")
+    async def embed(payload: EmbedRequest) -> dict[str, Any]:
+        if container.multimodal is None or not settings.embedding_model:
+            raise HTTPException(status_code=503, detail="embedding service adapter not configured")
+        vectors = await container.multimodal.embed(model=settings.embedding_model, inputs=payload.inputs)
+        return {"vectors": vectors, "model": settings.embedding_model}
 
-    @api.post("/v1/vision", status_code=503)
-    def vision_unconfigured() -> dict[str, str]:
-        return {"status": "unconfigured", "detail": "vision service adapter not configured"}
+    @api.post("/v1/vision")
+    async def vision(payload: VisionRequest) -> dict[str, Any]:
+        if container.multimodal is None or not settings.vision_model:
+            raise HTTPException(status_code=503, detail="vision service adapter not configured")
+        if not payload.image_url.startswith(("https://", "data:image/")):
+            raise HTTPException(status_code=422, detail="image_url must be HTTPS or a data image")
+        content = await container.multimodal.vision(
+            model=settings.vision_model, prompt=payload.prompt, image_url=payload.image_url
+        )
+        return {"content": content, "model": settings.vision_model}
 
-    @api.post("/v1/audio/transcribe", status_code=503)
-    def transcribe_unconfigured() -> dict[str, str]:
-        return {"status": "unconfigured", "detail": "STT service adapter not configured"}
+    @api.post("/v1/audio/transcribe")
+    async def transcribe(payload: TranscriptionRequest) -> dict[str, Any]:
+        if container.multimodal is None or not settings.transcription_model:
+            raise HTTPException(status_code=503, detail="STT service adapter not configured")
+        try:
+            audio = base64.b64decode(payload.audio_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="invalid base64 audio") from exc
+        content = await container.multimodal.transcribe(
+            model=settings.transcription_model, audio=audio, filename=payload.filename
+        )
+        return {"text": content, "model": settings.transcription_model}
 
-    @api.post("/v1/audio/speech", status_code=503)
-    def speech_unconfigured() -> dict[str, str]:
-        return {"status": "unconfigured", "detail": "TTS service adapter not configured"}
+    @api.post("/v1/audio/speech")
+    async def speech(payload: SpeechRequest) -> dict[str, Any]:
+        if container.multimodal is None or not settings.speech_model:
+            raise HTTPException(status_code=503, detail="TTS service adapter not configured")
+        audio_base64 = await container.multimodal.speech(
+            model=settings.speech_model, voice=payload.voice, text=payload.text
+        )
+        return {"audio_base64": audio_base64, "model": settings.speech_model}
+
+    @api.post("/v1/rerank")
+    async def rerank(payload: RerankRequest) -> dict[str, Any]:
+        if container.multimodal is None or not settings.rerank_model:
+            raise HTTPException(status_code=503, detail="rerank service adapter not configured")
+        scores = await container.multimodal.rerank(
+            model=settings.rerank_model, query=payload.query, documents=payload.documents
+        )
+        return {"scores": scores, "model": settings.rerank_model}
 
     @api.post("/v1/security/inspect")
     def inspect(payload: InjectionInspect) -> dict[str, Any]:
@@ -296,6 +421,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def agent_spec(payload: AgentCreateSpec) -> dict[str, Any]:
         return AgentFactory().specification(**payload.model_dump()).model_dump()
 
+    @api.post("/v1/agents/audit")
+    def agent_audit(payload: AgentAuditRequest) -> dict[str, Any]:
+        return container.agent_auditor.audit(
+            payload.spec,
+            tests_passed=payload.tests_passed,
+            benchmark_passed=payload.benchmark_passed,
+            independent_review_passed=payload.independent_review_passed,
+            external_action_approved=payload.external_action_approved,
+        ).model_dump()
+
     @api.post("/v1/skills/spec")
     def skill_spec(payload: SkillCreateSpec) -> dict[str, Any]:
         return SkillFactory().specification(**payload.model_dump()).model_dump()
@@ -315,6 +450,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def create_hypothesis(payload: HypothesisCreate) -> dict[str, Any]:
         return container.hypotheses.create(**payload.model_dump()).model_dump(mode="json")
 
+    @api.post("/v1/evaluations/score")
+    def evaluation_score(payload: EvalScoreRequest) -> dict[str, Any]:
+        return container.evaluation.score(payload.case, payload.output).model_dump()
+
+    @api.post("/v1/reviews")
+    def review(payload: ReviewInput) -> dict[str, Any]:
+        reports = container.reviews.review(payload)
+        return {"approved": all(item.passed for item in reports), "reports": [item.model_dump() for item in reports]}
+
+    @api.post("/v1/recovery/decide")
+    def recovery(payload: RecoveryRequest) -> dict[str, Any]:
+        return container.recovery.decide(payload.error_type, payload.status_code).model_dump()
+
     @api.post("/v1/improvements/advance")
     def advance_improvement(payload: ImprovementProposal) -> dict[str, Any]:
         try:
@@ -322,9 +470,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    @api.post("/v1/projects/validate")
+    def validate_project(payload: ProjectRegistrationRequest) -> dict[str, Any]:
+        contract = CANONICAL_PROJECTS.get(payload.key)
+        if contract is None:
+            raise HTTPException(status_code=404, detail="unknown canonical project")
+        result = container.project_validator.validate_registration(contract, payload.registration)
+        if payload.persist and result.valid:
+            container.registry.upsert(RegistryKind.PROJECT, payload.key, payload.registration)
+            container.audit.record("project.registered", "owner", {"project": payload.key})
+        return result.model_dump()
+
     @api.get("/v1/world-state")
     def world_state() -> dict[str, Any]:
         return container.world_state.snapshot().model_dump(mode="json")
+
+    @api.get("/v1/control-center")
+    def control_center() -> dict[str, Any]:
+        return container.control_center.snapshot().model_dump(mode="json")
 
     @api.get("/v1/telemetry/summary")
     def telemetry_summary() -> dict[str, Any]:
