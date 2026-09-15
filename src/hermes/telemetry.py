@@ -57,6 +57,16 @@ class SqlUsageStore:
         if event.cost_usd:
             COST.labels(event.project or "unassigned", provider, model).inc(event.cost_usd)
 
+    def cost_since(self, *, project: str | None, since: datetime) -> float:
+        statement = select(func.coalesce(func.sum(UsageRow.cost_usd), 0.0)).where(
+            UsageRow.created_at >= since
+        )
+        if project is not None:
+            statement = statement.where(UsageRow.project == project)
+        with self.db.sessions() as session:
+            value = session.scalar(statement) or 0.0
+        return round(float(value), 6)
+
     def summary(self) -> dict[str, Any]:
         with self.db.sessions() as session:
             count = session.scalar(select(func.count()).select_from(UsageRow)) or 0
