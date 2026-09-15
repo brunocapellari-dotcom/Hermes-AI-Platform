@@ -24,6 +24,7 @@ class RegistryKind(StrEnum):
     EVALUATION = "evaluation"
     IMPROVEMENT = "improvement"
     ALERT = "alert"
+    BUDGET = "budget"
 
 
 class RegistryItem(BaseModel):
