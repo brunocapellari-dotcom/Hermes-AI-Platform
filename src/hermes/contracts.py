@@ -2,14 +2,29 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
+
+from pydantic import BaseModel, Field
 
 from hermes.domain import Evidence, Mission, PolicyDecision, PolicyRequest
 from hermes.research import ResearchPackage, ResearchRequest
 
 
+class CompletionResult(BaseModel):
+    content: str
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+
+
 class ModelGateway(Protocol):
     async def complete(self, *, model: str, system: str, user: str) -> str: ...
+
+
+@runtime_checkable
+class MeteredModelGateway(ModelGateway, Protocol):
+    async def complete_metered(
+        self, *, model: str, system: str, user: str
+    ) -> CompletionResult: ...
 
 
 class ProjectAdapter(Protocol):
