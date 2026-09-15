@@ -35,6 +35,8 @@ class HermesOrchestrator:
         actor = authenticated_actor(actor) or actor
         intent = await self.intent_engine.analyze(request)
         projects = self.project_router.route(intent.capabilities)
+        routed_projects = set(projects.values())
+        research_project = next(iter(routed_projects)) if len(routed_projects) == 1 else None
         evidence = []
         research_triggered = False
         research_request_id: str | None = None
@@ -44,7 +46,7 @@ class HermesOrchestrator:
             evidence = await self.knowledge.search(intent.goal)
         if (intent.requires_research or not self.gaps.sufficient(evidence)) and self.research is not None:
             research_request = ResearchRequest(
-                project=projects[0] if len(projects) == 1 else None,
+                project=research_project,
                 domain=intent.capabilities[0] if intent.capabilities else None,
                 question=intent.goal,
                 urgency=intent.urgency,
