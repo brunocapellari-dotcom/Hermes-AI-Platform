@@ -9,7 +9,7 @@ from typing import Any, cast
 import httpx
 from dbos import DBOS, DBOSConfig
 
-from hermes.domain import ActionType, Mission, MissionStatus, TaskNode, TaskStatus
+from hermes.domain import Mission, MissionStatus, TaskNode, TaskStatus
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.registry import RegistryKind, SqlRegistry
 
