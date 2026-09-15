@@ -22,6 +22,9 @@ CAPABILITY_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"mercado financeiro|ação|acoes|ações|valuation", re.I), "financial_analysis", "MERCADO_FINANCEIRO"),
     (re.compile(r"esporte|futebol|odds|matchup", re.I), "sports_analysis", "SPORTS_INTELLIGENCE"),
     (re.compile(r"geopol|conflito|sanção|sancao", re.I), "geopolitical_analysis", "GEOPOLITICAL_WATCH"),
+    (re.compile(r"agente|skill|duplicad", re.I), "agent_management", "HERMES"),
+    (re.compile(r"ia local|modelo local|roteamento de modelo|model router", re.I), "model_management", "HERMES"),
+    (re.compile(r"outro projeto|reutiliz|serve para", re.I), "cross_project_analysis", "HERMES"),
 )
 
 
@@ -57,13 +60,13 @@ class HybridIntentEngine:
             return ActionType.DELETE
         if re.search(r"atualize|altere|corrija|edite|modifique", text, re.I):
             return ActionType.UPDATE
-        if re.search(r"crie|gere|construa|monte|transforme|faça um|faca um", text, re.I):
+        if re.search(r"crie|gere|construa|mont(?:e|a)|transforme|faça um|faca um", text, re.I):
             return ActionType.CREATE
         if re.search(r"envie|publique|execute|rode|compre|pague", text, re.I):
             return ActionType.EXECUTE
         if "research" in capabilities or re.search(r"pesquis|busque|procure", text, re.I):
             return ActionType.RESEARCH
-        if re.search(r"como está|como esta|status|mostre|veja|liste|qual", text, re.I):
+        if re.search(r"como está|como esta|status|mostre|veja|liste|qual|tem ", text, re.I):
             return ActionType.QUERY
         return ActionType.ANALYZE
 
@@ -105,21 +108,35 @@ class HybridIntentEngine:
 
 
 class TaskGraphPlanner:
+    """Build a dependency graph without serializing independent capabilities by default."""
+
+    DEPENDENCY_RULES: dict[str, set[str]] = {
+        "content_creation": {"research", "knowledge_query"},
+        "freight_analysis": {"message_processing", "research"},
+        "financial_analysis": {"research"},
+        "geopolitical_analysis": {"research"},
+        "cross_project_analysis": {"research", "knowledge_query"},
+    }
+
     def plan(self, intent: Intent, projects: dict[str, str]) -> list[TaskNode]:
-        tasks: list[TaskNode] = []
-        previous: str | None = None
-        for capability in intent.capabilities:
-            project = projects.get(capability)
-            node = TaskNode(
+        tasks = [
+            TaskNode(
                 capability=capability,
-                project=project,
+                project=projects.get(capability),
                 action_type=intent.action_type,
-                dependencies=[previous] if previous else [],
                 expected_output=f"validated output for {capability}",
                 risk=intent.risk,
             )
-            tasks.append(node)
-            previous = node.task_id
+            for capability in intent.capabilities
+        ]
+        by_capability = {task.capability: task for task in tasks}
+        for task in tasks:
+            prerequisites = self.DEPENDENCY_RULES.get(task.capability, set())
+            task.dependencies = [
+                by_capability[capability].task_id
+                for capability in sorted(prerequisites)
+                if capability in by_capability and capability != task.capability
+            ]
         return tasks
 
 
