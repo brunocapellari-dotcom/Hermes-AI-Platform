@@ -13,6 +13,7 @@ from hermes.authorization import build_policy_engine
 from hermes.domain import Mission, MissionStatus, PolicyRequest, TaskNode, TaskStatus
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.registry import RegistryKind, SqlRegistry
+from hermes.security import PolicyEngine
 
 
 def _database() -> Database:
@@ -26,7 +27,7 @@ def _enabled(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _policy():
+def _policy() -> PolicyEngine:
     return build_policy_engine(
         allow_external_actions=_enabled(os.getenv("HERMES_ALLOW_EXTERNAL_ACTIONS")),
         opa_url=os.getenv("HERMES_OPA_URL"),
