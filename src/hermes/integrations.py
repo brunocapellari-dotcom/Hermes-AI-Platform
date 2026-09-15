@@ -6,6 +6,7 @@ from typing import Any, cast
 
 import httpx
 
+from hermes.auth import outbound_service_auth_enabled, service_identity_headers
 from hermes.domain import Evidence
 from hermes.research import ResearchPackage, ResearchRequest
 
@@ -27,6 +28,12 @@ def _hermes_headers(payload: Mapping[str, Any]) -> dict[str, str]:
         headers["X-Hermes-Task-ID"] = task_id
         headers["Idempotency-Key"] = task_id
     return headers
+
+
+def _service_headers(base_url: str, audience: str | None = None) -> dict[str, str]:
+    if not outbound_service_auth_enabled():
+        return {}
+    return service_identity_headers(audience or base_url)
 
 
 class OpenAICompatibleGateway:
@@ -70,13 +77,17 @@ class OpenAICompatibleGateway:
 class HoldingClient:
     key = "AI_HOLDING"
 
-    def __init__(self, base_url: str, timeout: float = 20.0) -> None:
+    def __init__(self, base_url: str, timeout: float = 20.0, *, audience: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.audience = audience
+
+    def _headers(self) -> dict[str, str]:
+        return _service_headers(self.base_url, self.audience)
 
     async def _get(self, path: str) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(f"{self.base_url}{path}")
+            response = await client.get(f"{self.base_url}{path}", headers=self._headers())
             response.raise_for_status()
             return _json_object(response)
 
@@ -109,26 +120,40 @@ class HoldingClient:
 
 
 class GenericProjectAdapter:
-    def __init__(self, key: str, base_url: str, timeout: float = 20.0) -> None:
+    def __init__(
+        self,
+        key: str,
+        base_url: str,
+        timeout: float = 20.0,
+        *,
+        audience: str | None = None,
+    ) -> None:
         self.key = key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.audience = audience
+
+    def _headers(self, payload: Mapping[str, Any] | None = None) -> dict[str, str]:
+        headers = _service_headers(self.base_url, self.audience)
+        if payload is not None:
+            headers.update(_hermes_headers(payload))
+        return headers
 
     async def health(self) -> Mapping[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(f"{self.base_url}/health")
+            response = await client.get(f"{self.base_url}/health", headers=self._headers())
             response.raise_for_status()
             return _json_object(response)
 
     async def status(self) -> Mapping[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(f"{self.base_url}/v1/status")
+            response = await client.get(f"{self.base_url}/v1/status", headers=self._headers())
             response.raise_for_status()
             return _json_object(response)
 
     async def capabilities(self) -> set[str]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(f"{self.base_url}/v1/capabilities")
+            response = await client.get(f"{self.base_url}/v1/capabilities", headers=self._headers())
             response.raise_for_status()
             data = _json_object(response)
             capabilities = data.get("capabilities", [])
@@ -142,7 +167,7 @@ class GenericProjectAdapter:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/query",
-                headers=_hermes_headers(payload),
+                headers=self._headers(payload),
                 json={"capability": capability, "payload": dict(payload)},
             )
             response.raise_for_status()
@@ -152,7 +177,7 @@ class GenericProjectAdapter:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/execute",
-                headers=_hermes_headers(payload),
+                headers=self._headers(payload),
                 json={"capability": capability, "payload": dict(payload)},
             )
             response.raise_for_status()
@@ -164,6 +189,7 @@ class GenericProjectAdapter:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/search",
+                headers=self._headers(),
                 json={"query": query, "limit": limit},
             )
             response.raise_for_status()
@@ -172,20 +198,25 @@ class GenericProjectAdapter:
     async def alerts(self, *, since: datetime | None = None) -> Mapping[str, Any]:
         params = {"since": since.isoformat()} if since else None
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(f"{self.base_url}/v1/alerts", params=params)
+            response = await client.get(
+                f"{self.base_url}/v1/alerts", headers=self._headers(), params=params
+            )
             response.raise_for_status()
             return _json_object(response)
 
 
 class SecondBrainClient:
-    def __init__(self, base_url: str, timeout: float = 20.0) -> None:
+    def __init__(self, base_url: str, timeout: float = 20.0, *, audience: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.audience = audience
 
     async def search(self, query: str, *, limit: int = 10) -> list[Evidence]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
-                f"{self.base_url}/v1/search", json={"query": query, "limit": limit}
+                f"{self.base_url}/v1/search",
+                headers=_service_headers(self.base_url, self.audience),
+                json={"query": query, "limit": limit},
             )
             response.raise_for_status()
             data = _json_object(response)
@@ -196,14 +227,16 @@ class SecondBrainClient:
 
 
 class ResearchClient:
-    def __init__(self, base_url: str, timeout: float = 20.0) -> None:
+    def __init__(self, base_url: str, timeout: float = 20.0, *, audience: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.audience = audience
 
     async def research(self, request: ResearchRequest) -> ResearchPackage:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/research",
+                headers=_service_headers(self.base_url, self.audience),
                 json=request.model_dump(mode="json"),
             )
             response.raise_for_status()
