@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Any
 
 from dbos import DBOSClient, EnqueueOptions
 
@@ -31,5 +31,5 @@ class DBOSMissionDispatcher:
             "duplication_policy": "return-existing",
             "attributes": {"hermes_mission_id": mission_id},
         }
-        handle = self.client.enqueue(options, mission_id)
-        return cast(str, handle.workflow_id)
+        handle: Any = self.client.enqueue(options, mission_id)
+        return str(handle.workflow_id)
