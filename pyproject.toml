@@ -5,6 +5,7 @@ description = "Shared AI orchestration platform for the Hermes ecosystem"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
+  "cloud-sql-python-connector[psycopg]>=1.22,<2",
   "dbos[otel]>=2.28,<3",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",

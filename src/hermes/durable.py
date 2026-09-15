@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from dbos import DBOSClient, EnqueueOptions
+from sqlalchemy.engine import Engine
+
+from hermes.cloud_sql import cloud_sql_engine, is_cloud_sql_iam_url
 
 
 class DBOSMissionDispatcher:
@@ -16,8 +19,14 @@ class DBOSMissionDispatcher:
         queue_name: str = "hermes-missions",
     ) -> None:
         self.queue_name = queue_name
+        system_database_engine: Engine | None = None
+        dbos_url: str | None = system_database_url
+        if is_cloud_sql_iam_url(system_database_url):
+            system_database_engine = cloud_sql_engine(system_database_url)
+            dbos_url = None
         self.client = DBOSClient(
-            system_database_url=system_database_url,
+            system_database_url=dbos_url,
+            system_database_engine=system_database_engine,
             application_name=application_name,
         )
         self.client.register_queue(queue_name)
@@ -33,3 +42,6 @@ class DBOSMissionDispatcher:
         }
         handle: Any = self.client.enqueue(options, mission_id)
         return str(handle.workflow_id)
+
+    def close(self) -> None:
+        self.client.destroy()

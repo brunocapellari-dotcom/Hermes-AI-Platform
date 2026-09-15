@@ -27,21 +27,9 @@ variable "db_tier" {
 }
 
 variable "runtime_enabled" {
-  description = "Enable Cloud Run only after secret versions exist."
+  description = "Enable Cloud Run only after IAM database users, migrations and live gates are ready."
   type        = bool
   default     = false
-}
-
-variable "database_secret_version" {
-  description = "Pinned Secret Manager version containing the Hermes application DB URL."
-  type        = string
-  default     = "1"
-}
-
-variable "dbos_secret_version" {
-  description = "Pinned Secret Manager version containing the DBOS system DB URL."
-  type        = string
-  default     = "1"
 }
 
 variable "vpc_cidr" {

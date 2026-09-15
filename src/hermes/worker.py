@@ -10,6 +10,7 @@ import httpx
 from dbos import DBOS, DBOSConfig
 
 from hermes.authorization import build_policy_engine
+from hermes.cloud_sql import close_cloud_sql_resources, cloud_sql_engine, is_cloud_sql_iam_url
 from hermes.domain import Mission, MissionStatus, PolicyRequest, TaskNode, TaskStatus
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.registry import RegistryKind, SqlRegistry
@@ -193,8 +194,11 @@ def main() -> None:
     config: DBOSConfig = {
         "name": os.getenv("HERMES_DBOS_APPLICATION_NAME", "hermes-worker"),
         "application_version": os.getenv("HERMES_VERSION", "0.1.0"),
-        "system_database_url": system_database_url,
     }
+    if is_cloud_sql_iam_url(system_database_url):
+        config["system_database_engine"] = cloud_sql_engine(system_database_url)
+    else:
+        config["system_database_url"] = system_database_url
     DBOS(config=config)
     DBOS.register_queue(queue_name)
     DBOS.listen_queues([queue_name])
@@ -209,6 +213,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, _stop)
     stop.wait()
     DBOS.destroy()
+    close_cloud_sql_resources()
 
 
 if __name__ == "__main__":

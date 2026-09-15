@@ -6,6 +6,22 @@ output "cloud_sql_instance" {
   value = google_sql_database_instance.hermes.connection_name
 }
 
+output "runtime_service_account" {
+  value = google_service_account.hermes.email
+}
+
+output "migration_service_account" {
+  value = google_service_account.hermes_migration.email
+}
+
+output "runtime_database_user" {
+  value = local.runtime_db_user
+}
+
+output "migration_database_user" {
+  value = local.migration_db_user
+}
+
 output "artifact_registry" {
   value = google_artifact_registry_repository.hermes.name
 }

@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import DateTime, Float, String, Text, create_engine, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
+from hermes.cloud_sql import cloud_sql_engine, is_cloud_sql_iam_url
 from hermes.domain import Mission
 
 
@@ -84,14 +85,20 @@ class ModelPerformanceRow(Base):
 
 class Database:
     def __init__(self, url: str) -> None:
-        kwargs: dict[str, Any] = {"pool_pre_ping": True}
-        if url.startswith("sqlite"):
-            kwargs["connect_args"] = {"check_same_thread": False}
-        self.engine = create_engine(url, **kwargs)
+        if is_cloud_sql_iam_url(url):
+            self.engine = cloud_sql_engine(url)
+        else:
+            kwargs: dict[str, Any] = {"pool_pre_ping": True}
+            if url.startswith("sqlite"):
+                kwargs["connect_args"] = {"check_same_thread": False}
+            self.engine = create_engine(url, **kwargs)
         self.sessions = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def create_schema(self) -> None:
         Base.metadata.create_all(self.engine)
+
+    def close(self) -> None:
+        self.engine.dispose()
 
 
 class SqlMissionStore:

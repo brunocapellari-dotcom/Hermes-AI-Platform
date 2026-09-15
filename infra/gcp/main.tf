@@ -8,6 +8,8 @@ locals {
     "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
   ])
+  runtime_db_user   = trimsuffix(google_service_account.hermes.email, ".gserviceaccount.com")
+  migration_db_user = trimsuffix(google_service_account.hermes_migration.email, ".gserviceaccount.com")
 }
 
 resource "google_project_service" "required" {
@@ -19,6 +21,35 @@ resource "google_project_service" "required" {
 resource "google_service_account" "hermes" {
   account_id   = "hermes-ai-platform"
   display_name = "Hermes AI Platform runtime"
+}
+
+resource "google_service_account" "hermes_migration" {
+  account_id   = "hermes-db-migration"
+  display_name = "Hermes database migration identity"
+}
+
+resource "google_project_iam_member" "hermes_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.hermes.email}"
+}
+
+resource "google_project_iam_member" "hermes_cloudsql_instance_user" {
+  project = var.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.hermes.email}"
+}
+
+resource "google_project_iam_member" "migration_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.hermes_migration.email}"
+}
+
+resource "google_project_iam_member" "migration_cloudsql_instance_user" {
+  project = var.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.hermes_migration.email}"
 }
 
 resource "google_artifact_registry_repository" "hermes" {
@@ -70,6 +101,11 @@ resource "google_sql_database_instance" "hermes" {
     tier              = var.db_tier
     availability_type = "REGIONAL"
 
+    database_flags {
+      name  = "cloudsql.iam_authentication"
+      value = "on"
+    }
+
     backup_configuration {
       enabled                        = true
       point_in_time_recovery_enabled = true
@@ -94,36 +130,17 @@ resource "google_sql_database" "hermes_workflows" {
   instance = google_sql_database_instance.hermes.name
 }
 
-resource "google_secret_manager_secret" "database_url" {
-  secret_id = "hermes-database-url"
-
-  replication {
-    auto {}
-  }
-
-  depends_on = [google_project_service.required]
+resource "google_sql_user" "hermes_runtime" {
+  name     = local.runtime_db_user
+  instance = google_sql_database_instance.hermes.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
-resource "google_secret_manager_secret" "dbos_database_url" {
-  secret_id = "hermes-dbos-system-database-url"
-
-  replication {
-    auto {}
-  }
-
-  depends_on = [google_project_service.required]
-}
-
-resource "google_secret_manager_secret_iam_member" "database_url_runtime" {
-  secret_id = google_secret_manager_secret.database_url.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hermes.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "dbos_url_runtime" {
-  secret_id = google_secret_manager_secret.dbos_database_url.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hermes.email}"
+resource "google_sql_user" "hermes_migration" {
+  name           = local.migration_db_user
+  instance       = google_sql_database_instance.hermes.name
+  type           = "CLOUD_IAM_SERVICE_ACCOUNT"
+  database_roles = ["cloudsqlsuperuser"]
 }
 
 resource "google_bigquery_dataset" "telemetry" {
@@ -161,23 +178,28 @@ resource "google_cloud_run_v2_service" "hermes" {
       }
 
       env {
-        name = "HERMES_DATABASE_URL"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.database_url.secret_id
-            version = var.database_secret_version
-          }
-        }
+        name  = "HERMES_DATABASE_URL"
+        value = "cloudsql+iam:///hermes"
       }
 
       env {
-        name = "HERMES_DBOS_SYSTEM_DATABASE_URL"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.dbos_database_url.secret_id
-            version = var.dbos_secret_version
-          }
-        }
+        name  = "HERMES_DBOS_SYSTEM_DATABASE_URL"
+        value = "cloudsql+iam:///hermes_workflows"
+      }
+
+      env {
+        name  = "HERMES_CLOUD_SQL_INSTANCE_CONNECTION_NAME"
+        value = google_sql_database_instance.hermes.connection_name
+      }
+
+      env {
+        name  = "HERMES_CLOUD_SQL_IAM_USER"
+        value = local.runtime_db_user
+      }
+
+      env {
+        name  = "HERMES_CLOUD_SQL_IP_TYPE"
+        value = "private"
       }
     }
 
@@ -193,7 +215,8 @@ resource "google_cloud_run_v2_service" "hermes" {
 
   depends_on = [
     google_project_service.required,
-    google_secret_manager_secret_iam_member.database_url_runtime,
-    google_secret_manager_secret_iam_member.dbos_url_runtime,
+    google_project_iam_member.hermes_cloudsql_client,
+    google_project_iam_member.hermes_cloudsql_instance_user,
+    google_sql_user.hermes_runtime,
   ]
 }

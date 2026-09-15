@@ -14,6 +14,9 @@ Use for model selection and regression benchmarks, including Portuguese Bench, l
 ### Presidio 2.2.364 — ADOPT AS OPTIONAL PRIVACY ENGINE
 Presidio moved to the Data Privacy Stack organization and remains active. Use it behind the Hermes privacy adapter for richer PII recognition/anonymization when installed. Hermes keeps a lightweight deterministic secret/PII guard in the core so outbound safety does not disappear when the optional NLP stack is unavailable.
 
+### Cloud SQL Python Connector 1.22.x — ADOPT FOR GCP DATABASE CONNECTIONS
+Canonical Google Cloud connection path is the Python Connector with psycopg, lazy refresh and automatic IAM database authentication over private IP. It replaces static database-password URL secrets in the GCP design. Hermes keeps ordinary SQLAlchemy URLs for local/test/portable deployments. DBOS 2.31.1 accepts a custom SQLAlchemy system database engine, so the same IAM connection boundary can be reused without introducing a second credential mechanism.
+
 ### Bifrost — BENCHMARK
 High-performance Go gateway and useful alternative. Do not run concurrently with LiteLLM by default. Promote only if Hermes benchmarks show material latency/throughput/reliability advantage for our workload with compatible licensing/features.
 
@@ -36,7 +39,7 @@ Still a strong distributed durable platform. Promote over DBOS only if multi-lan
 OPA evaluates policy; OpenFGA models relationship authorization. Keep authorization outside prompts and models. Application policy guards remain fail-closed but are not the complete production authorization layer.
 
 ### Google Secret Manager — ADOPT on GCP
-Avoid a second secrets platform in the first GCP production deployment. Infisical/OpenBao remain portability alternatives, not parallel secret stores.
+Use for credentials that cannot use workload identity/IAM. Do not store Cloud SQL database passwords when automatic IAM database authentication is available. Infisical/OpenBao remain portability alternatives, not parallel secret stores.
 
 ### OpenTelemetry — ADOPT
 Vendor-neutral traces/metrics/log correlation. GenAI semantic conventions cover model, agent, workflow, tool and MCP operations but remain Development, so Hermes must isolate semantic-version changes behind its telemetry adapter.
@@ -59,6 +62,7 @@ Upstream is archived. Do not add a security-critical dependency without an activ
 - MCP Security Gateway: explicit server/tool allowlists, HTTPS/private-network rejection, schema pinning and mutation approval boundary.
 - Sensitive Data Guard: deterministic secret and common personal-data detection/redaction before external model/tool calls; Presidio can enrich it as an optional engine.
 - Deliberation Engine: deterministic multi-candidate scoring, quorum and disagreement escalation. It complements Critic/Judge/Auditor rather than replacing them.
+- Cloud SQL IAM connection boundary: the operational database and DBOS workflow database can share the same short-lived IAM authentication mechanism without sharing schema or source-of-truth responsibilities.
 
 ## Anti-sprawl rules
 
