@@ -1,0 +1,82 @@
+[
+  {
+    "request": "Como está a Holding?",
+    "capability": "portfolio_status",
+    "project": "AI_HOLDING",
+    "action_type": "query",
+    "requires_research": false,
+    "private_only": false
+  },
+  {
+    "request": "Continue o AgroLog.",
+    "capability": "freight_analysis",
+    "project": "AGROLOG_MT",
+    "action_type": "analyze",
+    "requires_research": false,
+    "private_only": false
+  },
+  {
+    "request": "Veja o que o Obsidian aprendeu.",
+    "capability": "knowledge_query",
+    "project": "SECOND_BRAIN",
+    "action_type": "query",
+    "requires_research": false,
+    "private_only": false
+  },
+  {
+    "request": "Pesquise APIs melhores.",
+    "capability": "research",
+    "project": "RESEARCH_AI",
+    "action_type": "research",
+    "requires_research": true,
+    "private_only": false
+  },
+  {
+    "request": "Crie o agente necessário.",
+    "capability": "agent_management",
+    "project": "HERMES",
+    "action_type": "create",
+    "requires_research": false,
+    "private_only": false
+  },
+  {
+    "request": "Tem agentes duplicados?",
+    "capability": "agent_management",
+    "project": "HERMES",
+    "action_type": "query",
+    "requires_research": false,
+    "private_only": false
+  },
+  {
+    "request": "Use apenas IA local.",
+    "capability": "model_management",
+    "project": "HERMES",
+    "action_type": "analyze",
+    "requires_research": false,
+    "private_only": true
+  },
+  {
+    "request": "Transforme isso em vídeo.",
+    "capability": "content_creation",
+    "project": "CONTENT_FACTORY",
+    "action_type": "create",
+    "requires_research": false,
+    "private_only": false
+  },
+  {
+    "request": "Monta meu próximo bloco de treino.",
+    "capability": "training_plan",
+    "project": "PERSONAL_PERFORMANCE",
+    "action_type": "create",
+    "requires_research": false,
+    "private_only": false
+  },
+  {
+    "request": "Isso serve para outro projeto?",
+    "capability": "cross_project_analysis",
+    "project": "HERMES",
+    "action_type": "analyze",
+    "requires_research": false,
+    "private_only": false
+  }
+]
