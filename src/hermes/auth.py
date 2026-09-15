@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import threading
 import time
 from collections.abc import Awaitable, Callable, Mapping
@@ -49,6 +50,15 @@ def _set_identity(identity: ServiceIdentity) -> Token[ServiceIdentity | None]:
 
 def _reset_identity(token: Token[ServiceIdentity | None]) -> None:
     _current_identity.reset(token)
+
+
+def outbound_service_auth_enabled() -> bool:
+    return os.getenv("HERMES_SERVICE_TO_SERVICE_AUTH", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 class GoogleOIDCVerifier:
@@ -125,6 +135,15 @@ class GoogleIDTokenProvider:
 
     def headers(self, audience: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token(audience)}"}
+
+
+_default_token_provider = GoogleIDTokenProvider()
+
+
+def service_identity_headers(audience: str) -> dict[str, str]:
+    if not audience.startswith("https://"):
+        raise ValueError("service-to-service identity tokens require an HTTPS audience")
+    return _default_token_provider.headers(audience)
 
 
 class ServiceAuthMiddleware:
