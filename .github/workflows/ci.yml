@@ -29,6 +29,27 @@ jobs:
         run: alembic upgrade head
       - run: pytest
 
+  authorization-policy-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned OPA v1.20.2
+        run: |
+          curl -fsSLo /tmp/opa https://github.com/open-policy-agent/opa/releases/download/v1.20.2/opa_linux_amd64
+          echo "ed3127751a4c786eb407d26a952c92f45fdcc4b97e0af25cd5d721a414fab244  /tmp/opa" | sha256sum -c -
+          chmod +x /tmp/opa
+      - name: Validate and test OPA policy
+        run: |
+          /tmp/opa check --strict policy/opa
+          /tmp/opa test policy/opa --verbose
+      - name: Install pinned OpenFGA CLI v0.7.20
+        run: |
+          curl -fsSLo /tmp/fga.tar.gz https://github.com/openfga/cli/releases/download/v0.7.20/fga_0.7.20_linux_amd64.tar.gz
+          echo "f0136868bdced6f8fded1876d41aa8d594d23588183497f6d876c1a5343529a4  /tmp/fga.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/fga.tar.gz -C /tmp
+      - name: Validate OpenFGA authorization model
+        run: /tmp/fga model validate --file policy/openfga/model.fga
+
   container-build:
     runs-on: ubuntu-latest
     steps:
