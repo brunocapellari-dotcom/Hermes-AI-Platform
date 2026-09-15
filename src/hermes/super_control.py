@@ -5,12 +5,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from hermes.agent_routing import AgentRouteRequest, AgentRouter
 from hermes.deliberation import DeliberationCandidate, DeliberationEngine
 from hermes.mcp_security import MCPServerSpec, MCPSecurityGateway, MCPToolCall
 from hermes.model_intelligence import ModelPerformanceSample, PersistentModelIntelligence
 from hermes.persistence import SqlAuditSink
 from hermes.privacy import SensitiveDataGuard
-from hermes.registry import RegistryKind, SqlRegistry
+from hermes.registry import PersistentAgentRegistry, RegistryKind, SqlRegistry
 
 
 class PrivacyInspectRequest(BaseModel):
@@ -36,6 +37,7 @@ class SuperControlPlane:
         self.audit = audit
         self.intelligence = intelligence
         self.privacy = privacy
+        self.agents = PersistentAgentRegistry(registry)
         self.mcp = MCPSecurityGateway()
         self.deliberation = DeliberationEngine()
         self._hydrate_mcp()
@@ -72,6 +74,17 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
     def model_performance(payload: ModelPerformanceSample) -> dict[str, Any]:
         control.intelligence.record(payload)
         return control.intelligence.summarize(payload.model_id, payload.task_class).model_dump(mode="json")
+
+    @router.post("/v1/agents/route")
+    def route_agent(payload: AgentRouteRequest) -> dict[str, Any]:
+        try:
+            return AgentRouter(control.agents.load()).route(payload).model_dump(mode="json")
+        except LookupError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @router.get("/v1/agents/active")
+    def active_agents() -> list[dict[str, Any]]:
+        return [agent.model_dump(mode="json") for agent in control.agents.load()]
 
     @router.post("/v1/security/privacy")
     def privacy(payload: PrivacyInspectRequest) -> dict[str, Any]:
