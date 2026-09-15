@@ -45,6 +45,12 @@ class ModelIntelligence:
             lambda: deque(maxlen=max_samples_per_model)
         )
 
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
     def record(self, sample: ModelPerformanceSample) -> None:
         self._samples[sample.model_id].append(sample)
 
@@ -54,7 +60,7 @@ class ModelIntelligence:
         task_class: ModelClass | None = None,
         now: datetime | None = None,
     ) -> ModelPerformanceSummary:
-        now = now or datetime.now(UTC)
+        now = self._as_utc(now or datetime.now(UTC))
         selected = [
             sample
             for sample in self._samples.get(model_id, ())
@@ -74,9 +80,7 @@ class ModelIntelligence:
 
         weighted: list[tuple[ModelPerformanceSample, float]] = []
         for sample in selected:
-            observed_at = sample.observed_at
-            if observed_at.tzinfo is None:
-                observed_at = observed_at.replace(tzinfo=UTC)
+            observed_at = self._as_utc(sample.observed_at)
             age_hours = max((now - observed_at).total_seconds() / 3600.0, 0.0)
             weight = math.pow(0.5, age_hours / self.half_life_hours)
             weighted.append((sample, weight))
@@ -86,10 +90,17 @@ class ModelIntelligence:
         latency = sum((1.0 / (1.0 + (s.latency_ms / 1000.0))) * w for s, w in weighted) / total_weight
         cost = sum((1.0 / (1.0 + (s.cost_usd * 100.0))) * w for s, w in weighted) / total_weight
 
-        recent = sorted(selected, key=lambda item: item.observed_at)[-min(5, len(selected)) :]
-        recent_quality = sum(item.quality for item in recent) / len(recent)
-        historical_quality = sum(item.quality for item in selected) / len(selected)
-        drift_penalty = max(historical_quality - recent_quality, 0.0)
+        drift_penalty = 0.0
+        ordered = sorted(selected, key=lambda item: self._as_utc(item.observed_at))
+        if len(ordered) >= 4:
+            recent_count = min(5, max(2, math.ceil(len(ordered) * 0.25)))
+            baseline_count = len(ordered) - recent_count
+            if baseline_count >= 2:
+                baseline = ordered[:baseline_count]
+                recent = ordered[baseline_count:]
+                baseline_quality = sum(item.quality for item in baseline) / len(baseline)
+                recent_quality = sum(item.quality for item in recent) / len(recent)
+                drift_penalty = max(baseline_quality - recent_quality, 0.0)
 
         return ModelPerformanceSummary(
             model_id=model_id,
