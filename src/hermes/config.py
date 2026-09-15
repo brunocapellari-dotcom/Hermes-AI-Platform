@@ -17,12 +17,24 @@ class Settings(BaseSettings):
     model_gateway_url: str | None = None
     model_gateway_api_key: SecretStr | None = None
     default_model: str | None = None
+    embedding_model: str | None = None
+    vision_model: str | None = None
+    transcription_model: str | None = None
+    speech_model: str | None = None
+    rerank_model: str | None = None
     holding_url: str | None = None
     second_brain_url: str | None = None
     research_url: str | None = None
+    opa_url: str | None = None
+    opa_policy_path: str = "hermes/allow"
+    openfga_url: str | None = None
+    openfga_store_id: str | None = None
+    openfga_model_id: str | None = None
+    external_authorization_required: bool = False
     allow_external_actions: bool = False
     auto_create_schema: bool = False
     request_timeout_seconds: float = 20.0
+    authorization_timeout_seconds: float = 5.0
 
     @property
     def is_production(self) -> bool:

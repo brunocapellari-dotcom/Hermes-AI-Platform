@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any
+from typing import Any, Protocol
 
 from hermes.domain import PolicyDecision, PolicyRequest, RiskLevel, ToolSpec, TrustLevel
+
+
+class PolicyEngine(Protocol):
+    def authorize(self, request: PolicyRequest) -> PolicyDecision: ...
 
 
 class DefaultPolicyEngine:
@@ -16,12 +20,16 @@ class DefaultPolicyEngine:
             return PolicyDecision(allowed=False, reason="untrusted content cannot expand authority")
         if request.money or request.production_admin:
             return PolicyDecision(
-                allowed=False, requires_approval=True, reason="owner approval required for critical authority"
+                allowed=False,
+                requires_approval=True,
+                reason="owner approval required for critical authority",
             )
         if request.external_write and not self.allow_external_actions:
             return PolicyDecision(allowed=False, reason="external writes disabled by policy")
         if request.risk == RiskLevel.CRITICAL:
-            return PolicyDecision(allowed=False, requires_approval=True, reason="critical action requires approval")
+            return PolicyDecision(
+                allowed=False, requires_approval=True, reason="critical action requires approval"
+            )
         return PolicyDecision(allowed=True, reason="policy permits action")
 
 
@@ -48,7 +56,7 @@ ToolHandler = Callable[[Mapping[str, Any]], Awaitable[Mapping[str, Any]]]
 
 
 class ToolGateway:
-    def __init__(self, policy: DefaultPolicyEngine) -> None:
+    def __init__(self, policy: PolicyEngine) -> None:
         self.policy = policy
         self._tools: dict[str, tuple[ToolSpec, ToolHandler]] = {}
 
@@ -69,7 +77,10 @@ class ToolGateway:
         decision = self.policy.authorize(
             PolicyRequest(
                 actor=actor,
+                subject=actor,
                 action=f"tool:{tool_id}",
+                resource=f"tool:{tool_id}",
+                relation="can_call",
                 risk=spec.risk,
                 trust=trust,
                 external_write=spec.permissions.external_actions or spec.permissions.write,

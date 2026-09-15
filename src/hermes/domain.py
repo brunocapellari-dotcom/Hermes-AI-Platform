@@ -209,7 +209,10 @@ class ToolSpec(BaseModel):
 
 class PolicyRequest(BaseModel):
     actor: str
+    subject: str | None = None
     action: str
+    resource: str | None = None
+    relation: str | None = None
     risk: RiskLevel
     trust: TrustLevel = TrustLevel.TRUSTED
     external_write: bool = False

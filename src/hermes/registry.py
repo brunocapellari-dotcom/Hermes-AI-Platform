@@ -21,6 +21,9 @@ class RegistryKind(StrEnum):
     SOURCE = "source"
     COLLECTOR = "collector"
     DEPLOYMENT = "deployment"
+    EVALUATION = "evaluation"
+    IMPROVEMENT = "improvement"
+    ALERT = "alert"
 
 
 class RegistryItem(BaseModel):
