@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -9,7 +10,7 @@ from sqlalchemy import text
 
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
 from hermes.config import Settings, get_settings
-from hermes.domain import ModelProfile, ModelRouteRequest, PolicyRequest, TrustLevel
+from hermes.domain import ModelRouteRequest, PolicyRequest, TrustLevel
 from hermes.factories import AgentFactory, SkillFactory
 from hermes.hardware import discover_hardware, recommend_local_runtime
 from hermes.integrations import OpenAICompatibleGateway, ResearchClient, SecondBrainClient
@@ -51,10 +52,16 @@ class AppContainer:
         if settings.auto_create_schema or not settings.is_production:
             self.db.create_schema()
         gateway = None
-        api_key = settings.model_gateway_api_key.get_secret_value() if settings.model_gateway_api_key else None
+        api_key = (
+            settings.model_gateway_api_key.get_secret_value()
+            if settings.model_gateway_api_key
+            else None
+        )
         if settings.model_gateway_url:
             gateway = OpenAICompatibleGateway(
-                settings.model_gateway_url, api_key=api_key, timeout=settings.request_timeout_seconds
+                settings.model_gateway_url,
+                api_key=api_key,
+                timeout=settings.request_timeout_seconds,
             )
         knowledge = (
             SecondBrainClient(settings.second_brain_url, settings.request_timeout_seconds)
@@ -87,7 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     container = AppContainer(settings)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
 
     api = FastAPI(title="Hermes AI Platform", version="0.1.0", lifespan=lifespan)
