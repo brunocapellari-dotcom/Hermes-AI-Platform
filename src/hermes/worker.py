@@ -9,6 +9,7 @@ from typing import Any, cast
 import httpx
 from dbos import DBOS, DBOSConfig, SetWorkflowID
 
+from hermes.auth import outbound_service_auth_enabled, service_identity_headers
 from hermes.authorization import build_policy_engine
 from hermes.cloud_sql import close_cloud_sql_resources, cloud_sql_engine, is_cloud_sql_iam_url
 from hermes.domain import Mission, MissionStatus, PolicyRequest, TaskNode, TaskStatus
@@ -43,7 +44,6 @@ def _policy() -> PolicyEngine:
 
 def _ready_task_wave(mission: Mission) -> tuple[list[TaskNode], dict[str, str]]:
     """Return the next dependency-safe execution wave and terminal dependency errors."""
-
     by_id = {task.task_id: task for task in mission.tasks}
     pending = [task for task in mission.tasks if task.status == TaskStatus.PENDING]
     blockers: dict[str, str] = {}
@@ -59,10 +59,8 @@ def _ready_task_wave(mission: Mission) -> tuple[list[TaskNode], dict[str, str]]:
         ]
         if failed:
             blockers[task.task_id] = f"dependency did not complete: {','.join(sorted(failed))}"
-
     if blockers:
         return [], blockers
-
     ready = [
         task
         for task in pending
@@ -92,7 +90,6 @@ def execute_project_task_step(
     task = TaskNode.model_validate(task_payload)
     if not task.project:
         return {"status": "blocked", "reason": "task has no project route"}
-
     registry = SqlRegistry(_database())
     item = registry.get(RegistryKind.PROJECT, task.project)
     if item is None:
@@ -100,19 +97,16 @@ def execute_project_task_step(
     base_url = item.payload.get("base_url")
     if not isinstance(base_url, str) or not base_url:
         return {"status": "blocked", "reason": f"project has no base_url: {task.project}"}
-
     capabilities = item.payload.get("capabilities", [])
     if isinstance(capabilities, list) and capabilities and task.capability not in capabilities:
         return {
             "status": "blocked",
             "reason": f"project does not advertise capability: {task.capability}",
         }
-
     if task.action_type.mutating and not bool(item.payload.get("allow_execute", False)):
         return {"status": "blocked", "reason": "project execute capability is not authorized"}
     if task.risk.value in {"high", "critical"} and task.action_type.mutating:
         return {"status": "blocked", "reason": "high-risk mutation requires owner approval"}
-
     relation = "can_execute" if task.action_type.mutating else "can_query"
     decision = _policy().authorize(
         PolicyRequest(
@@ -127,13 +121,16 @@ def execute_project_task_step(
     )
     if not decision.allowed:
         return {"status": "blocked", "reason": decision.reason}
-
     path = "/v1/execute" if task.action_type.mutating else "/v1/query"
     headers = {
         "X-Hermes-Mission-ID": mission_id,
         "X-Hermes-Task-ID": task.task_id,
         "Idempotency-Key": task.task_id,
     }
+    if outbound_service_auth_enabled():
+        configured_audience = item.payload.get("audience")
+        audience = configured_audience if isinstance(configured_audience, str) else base_url
+        headers.update(service_identity_headers(audience))
     payload = {
         "capability": task.capability,
         "payload": {
@@ -168,7 +165,6 @@ def update_task_state_step(
     task = next((candidate for candidate in mission.tasks if candidate.task_id == task_id), None)
     if task is None:
         raise KeyError(f"task not found: {task_id}")
-
     status = result.get("status")
     if status == "completed":
         task.status = TaskStatus.COMPLETED
@@ -186,11 +182,7 @@ def update_task_state_step(
         mission.status = MissionStatus.COMPLETED
     mission.updated_at = datetime.now(UTC)
     mission.checkpoints.append(
-        {
-            "at": mission.updated_at.isoformat(),
-            "task_id": task_id,
-            "status": task.status.value,
-        }
+        {"at": mission.updated_at.isoformat(), "task_id": task_id, "status": task.status.value}
     )
     store.save(mission)
     SqlAuditSink(db).record(
@@ -207,19 +199,14 @@ def execute_hermes_task(
     goal: str,
     task_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Durable child workflow for one project task."""
-
     return execute_project_task_step(mission_id, goal, task_payload)
 
 
 @DBOS.workflow(name="execute_hermes_mission", max_recovery_attempts=25)
 def execute_hermes_mission(mission_id: str) -> dict[str, Any]:
-    """Execute a task DAG in dependency-safe concurrent waves."""
-
     mission = Mission.model_validate(load_mission_step(mission_id))
     if mission.status in {MissionStatus.BLOCKED, MissionStatus.FAILED, MissionStatus.COMPLETED}:
         return mission.model_dump(mode="json")
-
     while True:
         ready, blockers = _ready_task_wave(mission)
         if blockers:
@@ -234,7 +221,6 @@ def execute_hermes_mission(mission_id: str) -> dict[str, Any]:
             return mission.model_dump(mode="json")
         if not ready:
             return mission.model_dump(mode="json")
-
         running: list[tuple[TaskNode, Any]] = []
         for task in ready:
             child_id = f"mission-{mission.mission_id}-task-{task.task_id}"
@@ -246,7 +232,6 @@ def execute_hermes_mission(mission_id: str) -> dict[str, Any]:
                     task.model_dump(mode="json"),
                 )
             running.append((task, handle))
-
         results = [(task, handle.get_result()) for task, handle in running]
         for task, result in results:
             if not isinstance(result, dict):
@@ -275,7 +260,6 @@ def main() -> None:
     DBOS.register_queue(queue_name)
     DBOS.listen_queues([queue_name])
     DBOS.launch()
-
     stop = threading.Event()
 
     def _stop(_signum: int, _frame: object) -> None:
