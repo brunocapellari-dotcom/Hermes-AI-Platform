@@ -2,6 +2,10 @@ output "cloud_run_service" {
   value = var.runtime_enabled ? google_cloud_run_v2_service.hermes[0].name : null
 }
 
+output "cloud_run_worker_pool" {
+  value = var.runtime_enabled ? google_cloud_run_v2_worker_pool.hermes_worker[0].name : null
+}
+
 output "cloud_sql_instance" {
   value = google_sql_database_instance.hermes.connection_name
 }
