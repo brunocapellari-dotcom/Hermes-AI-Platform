@@ -86,3 +86,38 @@ class AgentAuditor:
             raise ValueError("agent cannot be promoted without a passing independent audit")
         spec.status = "active"
         return spec
+
+
+class SkillAuditResult(BaseModel):
+    passed: bool
+    promotable: bool
+    findings: list[str] = Field(default_factory=list)
+
+
+class SkillAuditor:
+    def audit(
+        self,
+        spec: SkillSpec,
+        *,
+        tests_passed: bool,
+        benchmark_passed: bool,
+        independent_review_passed: bool,
+    ) -> SkillAuditResult:
+        findings: list[str] = []
+        if not spec.purpose or not spec.procedure:
+            findings.append("skill purpose/procedure is incomplete")
+        if not spec.validation:
+            findings.append("skill has no explicit validation")
+        if not tests_passed:
+            findings.append("tests failed or missing")
+        if not benchmark_passed:
+            findings.append("benchmark failed or missing")
+        if not independent_review_passed:
+            findings.append("independent review failed or missing")
+        passed = not findings
+        return SkillAuditResult(passed=passed, promotable=passed, findings=findings)
+
+    def promote(self, spec: SkillSpec, audit: SkillAuditResult) -> SkillSpec:
+        if not audit.promotable:
+            raise ValueError("skill cannot be promoted without a passing independent audit")
+        return spec
