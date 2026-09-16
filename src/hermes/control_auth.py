@@ -23,6 +23,7 @@ PROTECTED_OPERATIONS: tuple[ProtectedOperation, ...] = (
     ProtectedOperation("POST", re.compile(r"^/v1/missions/[^/]+/dispatch$"), "mission:dispatch", "can_dispatch", RiskLevel.MEDIUM),
     ProtectedOperation("POST", re.compile(r"^/v1/projects/validate$"), "project:register", "can_manage_projects", RiskLevel.HIGH),
     ProtectedOperation("POST", re.compile(r"^/v1/models/register$"), "model:register", "can_manage_models", RiskLevel.HIGH),
+    ProtectedOperation("POST", re.compile(r"^/v1/agents/promote$"), "agent:promote", "can_manage_agents", RiskLevel.HIGH),
     ProtectedOperation("POST", re.compile(r"^/v1/mcp/servers$"), "tool:register", "can_manage_tools", RiskLevel.HIGH),
     ProtectedOperation("POST", re.compile(r"^/v1/improvements/advance$"), "improvement:advance", "can_manage_improvements", RiskLevel.HIGH),
     ProtectedOperation("POST", re.compile(r"^/v1/models/performance$"), "model:performance_record", "can_record_model_performance", RiskLevel.MEDIUM),
