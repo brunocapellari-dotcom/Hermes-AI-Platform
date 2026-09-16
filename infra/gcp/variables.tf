@@ -17,6 +17,23 @@ variable "service_name" {
   default = "hermes-ai-platform"
 }
 
+variable "worker_pool_name" {
+  description = "Cloud Run worker pool that executes durable DBOS mission workflows."
+  type        = string
+  default     = "hermes-ai-worker"
+}
+
+variable "worker_instance_count" {
+  description = "Manual DBOS worker count. Keep one until live load and queue telemetry justify scaling."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.worker_instance_count >= 1 && var.worker_instance_count <= 20
+    error_message = "worker_instance_count must be between 1 and 20."
+  }
+}
+
 variable "service_auth_audience" {
   description = "Stable custom OIDC audience for service-to-service Hermes calls."
   type        = string
@@ -33,7 +50,7 @@ variable "db_tier" {
 }
 
 variable "runtime_enabled" {
-  description = "Enable Cloud Run only after IAM database users, migrations and live gates are ready."
+  description = "Enable Cloud Run API and worker only after IAM database users, migrations and live gates are ready."
   type        = bool
   default     = false
 }
