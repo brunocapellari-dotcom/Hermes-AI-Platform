@@ -32,10 +32,33 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         assert privacy.json()["outbound_allowed"] is False
         assert "user@example.com" not in privacy.json()["redacted"]
 
+        model = client.post(
+            "/v1/models/register",
+            json={
+                "status": "active",
+                "profile": {
+                    "model_id": "reasoning-a",
+                    "provider": "gateway",
+                    "model": "reasoning-a",
+                    "classes": ["REASONING", "ROUTINE"],
+                    "context_window": 32000,
+                    "supports_structured_output": True,
+                    "quality_score": 0.9,
+                    "benchmark_score": 0.9,
+                },
+            },
+        )
+        assert model.status_code == 200
+        routed = client.post("/v1/models/route", json={"required_classes": ["REASONING"]})
+        assert routed.status_code == 200
+        assert routed.json()["model_id"] == "reasoning-a"
+        listed = client.get("/v1/models")
+        assert [item["model_id"] for item in listed.json()] == ["reasoning-a"]
+
         performance = client.post(
             "/v1/models/performance",
             json={
-                "model_id": "model-a",
+                "model_id": "reasoning-a",
                 "task_class": "REASONING",
                 "success": True,
                 "quality": 0.92,
@@ -46,6 +69,30 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         assert performance.status_code == 200
         assert performance.json()["samples"] == 1
         assert performance.json()["quality_score"] == 0.92
+
+        promoted = client.post(
+            "/v1/agents/promote",
+            json={
+                "spec": {
+                    "name": "Research Coordinator",
+                    "project": "RESEARCH_AI",
+                    "mission": "coordinate research packages",
+                    "skills": ["research"],
+                    "tools": [],
+                    "permissions": {"read_scopes": ["research:read"]},
+                    "autonomy_level": 1,
+                    "risk": "low",
+                    "status": "sandbox",
+                },
+                "tests_passed": True,
+                "benchmark_passed": True,
+                "independent_review_passed": True,
+            },
+        )
+        assert promoted.status_code == 200
+        assert promoted.json()["status"] == "active"
+        active = client.get("/v1/agents/active")
+        assert [item["name"] for item in active.json()] == ["Research Coordinator"]
 
         registered = client.post(
             "/v1/mcp/servers",
@@ -107,10 +154,14 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         servers = client.get("/v1/mcp/servers")
         assert servers.status_code == 200
         assert [item["server_id"] for item in servers.json()] == ["research"]
+        assert [item["model_id"] for item in client.get("/v1/models").json()] == ["reasoning-a"]
+        assert [item["name"] for item in client.get("/v1/agents/active").json()] == [
+            "Research Coordinator"
+        ]
         performance = client.post(
             "/v1/models/performance",
             json={
-                "model_id": "model-a",
+                "model_id": "reasoning-a",
                 "task_class": "REASONING",
                 "success": True,
                 "quality": 0.88,
