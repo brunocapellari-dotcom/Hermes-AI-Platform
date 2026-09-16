@@ -243,20 +243,25 @@ def execute_hermes_mission(mission_id: str) -> dict[str, Any]:
             return mission.model_dump(mode="json")
 
 
-def main() -> None:
-    system_database_url = os.getenv("HERMES_DBOS_SYSTEM_DATABASE_URL")
-    if not system_database_url:
-        raise RuntimeError("HERMES_DBOS_SYSTEM_DATABASE_URL is required")
-    queue_name = os.getenv("HERMES_DBOS_QUEUE_NAME", "hermes-missions")
+def _dbos_runtime_config(system_database_url: str) -> DBOSConfig:
     config: DBOSConfig = {
         "name": os.getenv("HERMES_DBOS_APPLICATION_NAME", "hermes-worker"),
         "application_version": os.getenv("HERMES_VERSION", "0.1.0"),
+        "run_migrations": False,
     }
     if is_cloud_sql_iam_url(system_database_url):
         config["system_database_engine"] = cloud_sql_engine(system_database_url)
     else:
         config["system_database_url"] = system_database_url
-    DBOS(config=config)
+    return config
+
+
+def main() -> None:
+    system_database_url = os.getenv("HERMES_DBOS_SYSTEM_DATABASE_URL")
+    if not system_database_url:
+        raise RuntimeError("HERMES_DBOS_SYSTEM_DATABASE_URL is required")
+    queue_name = os.getenv("HERMES_DBOS_QUEUE_NAME", "hermes-missions")
+    DBOS(config=_dbos_runtime_config(system_database_url))
     DBOS.register_queue(queue_name)
     DBOS.listen_queues([queue_name])
     DBOS.launch()
