@@ -192,8 +192,23 @@ class PersistentModelIntelligence(ModelIntelligence):
 
 class AdaptiveModelRouter(ModelRouter):
     def __init__(self, models: list[ModelProfile] | None = None, intelligence: ModelIntelligence | None = None) -> None:
+        self._persistent_registry = None
         super().__init__(models)
         self.intelligence = intelligence or ModelIntelligence()
+        if isinstance(self.intelligence, PersistentModelIntelligence):
+            from hermes.registry import PersistentModelRegistry, SqlRegistry
+
+            self._persistent_registry = PersistentModelRegistry(SqlRegistry(self.intelligence.db))
+
+    @property
+    def models(self) -> list[ModelProfile]:
+        if self._persistent_registry is not None:
+            return self._persistent_registry.load()
+        return list(self._static_models)
+
+    @models.setter
+    def models(self, value: list[ModelProfile]) -> None:
+        self._static_models = list(value)
 
     @staticmethod
     def _task_class(request: ModelRouteRequest) -> ModelClass | None:
