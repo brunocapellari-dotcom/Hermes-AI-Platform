@@ -52,6 +52,91 @@ variable "service_auth_audience" {
   default     = "https://hermes.internal"
 }
 
+variable "model_gateway_url" {
+  description = "OpenAI-compatible model gateway URL, typically LiteLLM. Empty keeps generation disabled."
+  type        = string
+  default     = ""
+}
+
+variable "model_gateway_api_key_secret_version" {
+  description = "Pinned Secret Manager version for the model gateway key. Null means no gateway key is injected."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "default_model" {
+  type    = string
+  default = ""
+}
+
+variable "embedding_model" {
+  type    = string
+  default = ""
+}
+
+variable "vision_model" {
+  type    = string
+  default = ""
+}
+
+variable "transcription_model" {
+  type    = string
+  default = ""
+}
+
+variable "speech_model" {
+  type    = string
+  default = ""
+}
+
+variable "rerank_model" {
+  type    = string
+  default = ""
+}
+
+variable "second_brain_url" {
+  type    = string
+  default = ""
+}
+
+variable "research_url" {
+  type    = string
+  default = ""
+}
+
+variable "opa_url" {
+  type    = string
+  default = ""
+}
+
+variable "openfga_url" {
+  type    = string
+  default = ""
+}
+
+variable "openfga_store_id" {
+  type    = string
+  default = ""
+}
+
+variable "openfga_model_id" {
+  type    = string
+  default = ""
+}
+
+variable "external_authorization_required" {
+  description = "Fail closed unless external OPA/OpenFGA authorization is configured for protected operations."
+  type        = bool
+  default     = false
+}
+
+variable "allow_external_actions" {
+  description = "Global kill switch for project mutations; keep false until approval/idempotency live tests pass."
+  type        = bool
+  default     = false
+}
+
 variable "container_image" {
   type = string
 }
