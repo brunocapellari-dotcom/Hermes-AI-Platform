@@ -6,7 +6,7 @@ resource "google_cloud_run_v2_worker_pool" "hermes_worker" {
   deletion_protection = true
 
   scaling {
-    scaling_mode         = "MANUAL"
+    scaling_mode          = "MANUAL"
     manual_instance_count = var.worker_instance_count
   }
 
@@ -34,7 +34,32 @@ resource "google_cloud_run_v2_worker_pool" "hermes_worker" {
 
       env {
         name  = "HERMES_ALLOW_EXTERNAL_ACTIONS"
-        value = "false"
+        value = tostring(var.allow_external_actions)
+      }
+
+      env {
+        name  = "HERMES_OPA_URL"
+        value = var.opa_url
+      }
+
+      env {
+        name  = "HERMES_OPENFGA_URL"
+        value = var.openfga_url
+      }
+
+      env {
+        name  = "HERMES_OPENFGA_STORE_ID"
+        value = var.openfga_store_id
+      }
+
+      env {
+        name  = "HERMES_OPENFGA_MODEL_ID"
+        value = var.openfga_model_id
+      }
+
+      env {
+        name  = "HERMES_EXTERNAL_AUTHORIZATION_REQUIRED"
+        value = tostring(var.external_authorization_required)
       }
 
       env {
