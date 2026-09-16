@@ -3,15 +3,18 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from hermes.agent_routing import AgentRouteRequest, AgentRouter
+from hermes.auth import authenticated_actor
 from hermes.deliberation import DeliberationCandidate, DeliberationEngine
+from hermes.domain import AgentSpec, ModelProfile
+from hermes.factories import AgentAuditor
 from hermes.mcp_security import MCPServerSpec, MCPSecurityGateway, MCPToolCall
 from hermes.model_intelligence import ModelPerformanceSample, PersistentModelIntelligence
 from hermes.persistence import SqlAuditSink
 from hermes.privacy import SensitiveDataGuard
-from hermes.registry import PersistentAgentRegistry, RegistryKind, SqlRegistry
+from hermes.registry import PersistentAgentRegistry, PersistentModelRegistry, RegistryKind, SqlRegistry
 
 
 class PrivacyInspectRequest(BaseModel):
@@ -22,6 +25,19 @@ class PrivacyInspectRequest(BaseModel):
 
 class DeliberationRequest(BaseModel):
     candidates: list[DeliberationCandidate]
+
+
+class ModelRegistrationRequest(BaseModel):
+    profile: ModelProfile
+    status: str = Field(default="active", pattern=r"^(active|disabled|candidate|benchmark)$")
+
+
+class AgentPromotionRequest(BaseModel):
+    spec: AgentSpec
+    tests_passed: bool
+    benchmark_passed: bool
+    independent_review_passed: bool
+    external_action_approved: bool = False
 
 
 class SuperControlPlane:
@@ -37,10 +53,15 @@ class SuperControlPlane:
         self.audit = audit
         self.intelligence = intelligence
         self.privacy = privacy
+        self.models = PersistentModelRegistry(registry)
         self.agents = PersistentAgentRegistry(registry)
+        self.agent_auditor = AgentAuditor()
         self.mcp = MCPSecurityGateway()
         self.deliberation = DeliberationEngine()
         self._hydrate_mcp()
+
+    def _actor(self) -> str:
+        return authenticated_actor("local-owner") or "local-owner"
 
     def _hydrate_mcp(self) -> None:
         for item in self.registry.list(RegistryKind.TOOL):
@@ -56,6 +77,32 @@ class SuperControlPlane:
                     {"item_id": item.item_id, "error": type(exc).__name__},
                 )
 
+    def register_model(self, payload: ModelRegistrationRequest) -> ModelProfile:
+        self.models.save(payload.profile, status=payload.status)
+        self.audit.record(
+            "model.registered",
+            self._actor(),
+            {"model_id": payload.profile.model_id, "status": payload.status},
+        )
+        return payload.profile
+
+    def promote_agent(self, payload: AgentPromotionRequest) -> AgentSpec:
+        audit = self.agent_auditor.audit(
+            payload.spec,
+            tests_passed=payload.tests_passed,
+            benchmark_passed=payload.benchmark_passed,
+            independent_review_passed=payload.independent_review_passed,
+            external_action_approved=payload.external_action_approved,
+        )
+        promoted = self.agent_auditor.promote(payload.spec, audit)
+        self.agents.save(promoted)
+        self.audit.record(
+            "agent.promoted",
+            self._actor(),
+            {"agent_id": promoted.agent_id, "project": promoted.project},
+        )
+        return promoted
+
     def register_mcp(self, spec: MCPServerSpec) -> MCPServerSpec:
         self.mcp.register(spec)
         self.registry.upsert(
@@ -63,17 +110,28 @@ class SuperControlPlane:
             f"mcp:{spec.server_id}",
             {"protocol": "mcp", "spec": spec.model_dump(mode="json")},
         )
-        self.audit.record("mcp.server_registered", "owner", {"server_id": spec.server_id})
+        self.audit.record("mcp.server_registered", self._actor(), {"server_id": spec.server_id})
         return spec
 
 
 def build_super_router(control: SuperControlPlane) -> APIRouter:
     router = APIRouter()
 
+    @router.post("/v1/models/register")
+    def register_model(payload: ModelRegistrationRequest) -> dict[str, Any]:
+        return control.register_model(payload).model_dump(mode="json")
+
     @router.post("/v1/models/performance")
     def model_performance(payload: ModelPerformanceSample) -> dict[str, Any]:
         control.intelligence.record(payload)
         return control.intelligence.summarize(payload.model_id, payload.task_class).model_dump(mode="json")
+
+    @router.post("/v1/agents/promote")
+    def promote_agent(payload: AgentPromotionRequest) -> dict[str, Any]:
+        try:
+            return control.promote_agent(payload).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.post("/v1/agents/route")
     def route_agent(payload: AgentRouteRequest) -> dict[str, Any]:
