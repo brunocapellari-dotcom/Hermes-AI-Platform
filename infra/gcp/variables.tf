@@ -34,6 +34,18 @@ variable "worker_instance_count" {
   }
 }
 
+variable "migration_job_name" {
+  description = "Cloud Run Job used only for controlled Alembic + DBOS migrations."
+  type        = string
+  default     = "hermes-db-migrate"
+}
+
+variable "migration_job_enabled" {
+  description = "Create the migration job without executing it. Enable after a reviewed image exists."
+  type        = bool
+  default     = false
+}
+
 variable "service_auth_audience" {
   description = "Stable custom OIDC audience for service-to-service Hermes calls."
   type        = string
