@@ -217,6 +217,94 @@ resource "google_cloud_run_v2_service" "hermes" {
         name  = "HERMES_CLOUD_SQL_IP_TYPE"
         value = "private"
       }
+
+      env {
+        name  = "HERMES_MODEL_GATEWAY_URL"
+        value = var.model_gateway_url
+      }
+
+      env {
+        name  = "HERMES_DEFAULT_MODEL"
+        value = var.default_model
+      }
+
+      env {
+        name  = "HERMES_EMBEDDING_MODEL"
+        value = var.embedding_model
+      }
+
+      env {
+        name  = "HERMES_VISION_MODEL"
+        value = var.vision_model
+      }
+
+      env {
+        name  = "HERMES_TRANSCRIPTION_MODEL"
+        value = var.transcription_model
+      }
+
+      env {
+        name  = "HERMES_SPEECH_MODEL"
+        value = var.speech_model
+      }
+
+      env {
+        name  = "HERMES_RERANK_MODEL"
+        value = var.rerank_model
+      }
+
+      env {
+        name  = "HERMES_SECOND_BRAIN_URL"
+        value = var.second_brain_url
+      }
+
+      env {
+        name  = "HERMES_RESEARCH_URL"
+        value = var.research_url
+      }
+
+      env {
+        name  = "HERMES_OPA_URL"
+        value = var.opa_url
+      }
+
+      env {
+        name  = "HERMES_OPENFGA_URL"
+        value = var.openfga_url
+      }
+
+      env {
+        name  = "HERMES_OPENFGA_STORE_ID"
+        value = var.openfga_store_id
+      }
+
+      env {
+        name  = "HERMES_OPENFGA_MODEL_ID"
+        value = var.openfga_model_id
+      }
+
+      env {
+        name  = "HERMES_EXTERNAL_AUTHORIZATION_REQUIRED"
+        value = tostring(var.external_authorization_required)
+      }
+
+      env {
+        name  = "HERMES_ALLOW_EXTERNAL_ACTIONS"
+        value = tostring(var.allow_external_actions)
+      }
+
+      dynamic "env" {
+        for_each = var.model_gateway_api_key_secret_version == null ? [] : [var.model_gateway_api_key_secret_version]
+        content {
+          name = "HERMES_MODEL_GATEWAY_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.model_gateway_api_key.secret_id
+              version = env.value
+            }
+          }
+        }
+      }
     }
 
     vpc_access {
@@ -233,6 +321,7 @@ resource "google_cloud_run_v2_service" "hermes" {
     google_project_service.required,
     google_project_iam_member.hermes_cloudsql_client,
     google_project_iam_member.hermes_cloudsql_instance_user,
+    google_secret_manager_secret_iam_member.model_gateway_runtime_access,
     google_sql_user.hermes_runtime,
   ]
 }
