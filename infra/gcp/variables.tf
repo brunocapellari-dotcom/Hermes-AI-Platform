@@ -82,6 +82,17 @@ variable "model_gateway_url" {
   }
 }
 
+variable "model_gateway_audience" {
+  description = "Optional Cloud Run custom/default audience when the model gateway itself is private."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.model_gateway_audience == "" || startswith(var.model_gateway_audience, "https://")
+    error_message = "model_gateway_audience must be empty or use HTTPS."
+  }
+}
+
 variable "model_gateway_api_key_secret_version" {
   description = "Pinned Secret Manager version for the model gateway key. Null means no gateway key is injected."
   type        = string
