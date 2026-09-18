@@ -37,6 +37,8 @@ def _policy() -> PolicyEngine:
         openfga_url=os.getenv("HERMES_OPENFGA_URL"),
         openfga_store_id=os.getenv("HERMES_OPENFGA_STORE_ID"),
         openfga_model_id=os.getenv("HERMES_OPENFGA_MODEL_ID"),
+        opa_audience=os.getenv("HERMES_OPA_AUDIENCE"),
+        openfga_audience=os.getenv("HERMES_OPENFGA_AUDIENCE"),
         external_required=_enabled(os.getenv("HERMES_EXTERNAL_AUTHORIZATION_REQUIRED")),
         timeout=float(os.getenv("HERMES_AUTHORIZATION_TIMEOUT_SECONDS", "5")),
     )
