@@ -73,6 +73,11 @@ resource "google_cloud_run_v2_worker_pool" "hermes_worker" {
       }
 
       env {
+        name  = "HERMES_OTLP_ENDPOINT"
+        value = var.otlp_endpoint
+      }
+
+      env {
         name  = "HERMES_DATABASE_URL"
         value = "cloudsql+iam:///hermes"
       }
