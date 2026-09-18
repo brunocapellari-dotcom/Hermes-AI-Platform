@@ -49,10 +49,10 @@ jobs:
         run: |
           /tmp/opa check --strict policy/opa
           /tmp/opa test policy/opa --verbose
-      - name: Install pinned OpenFGA CLI v0.7.20
+      - name: Install pinned OpenFGA CLI v0.8.0
         run: |
-          curl -fsSLo /tmp/fga.tar.gz https://github.com/openfga/cli/releases/download/v0.7.20/fga_0.7.20_linux_amd64.tar.gz
-          echo "f0136868bdced6f8fded1876d41aa8d594d23588183497f6d876c1a5343529a4  /tmp/fga.tar.gz" | sha256sum -c -
+          curl -fsSLo /tmp/fga.tar.gz https://github.com/openfga/cli/releases/download/v0.8.0/fga_0.8.0_linux_amd64.tar.gz
+          echo "9393d915a1c2eef92986a53824be112ff918e4fe844e33dc6b45b0d3a902275a  /tmp/fga.tar.gz" | sha256sum -c -
           tar -xzf /tmp/fga.tar.gz -C /tmp
       - name: Validate OpenFGA authorization model
         run: /tmp/fga model validate --file policy/openfga/model.fga
