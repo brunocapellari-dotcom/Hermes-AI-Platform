@@ -5,6 +5,8 @@ from typing import Any, cast
 
 import httpx
 
+from hermes.auth import outbound_service_auth_enabled, serverless_identity_headers
+
 
 def _object(response: httpx.Response) -> dict[str, Any]:
     payload = cast(Any, response.json())
@@ -14,13 +16,24 @@ def _object(response: httpx.Response) -> dict[str, Any]:
 
 
 class OpenAICompatibleMultimodal:
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        timeout: float = 30.0,
+        *,
+        service_audience: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
+        self.service_audience = service_audience
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        if outbound_service_auth_enabled() and self.service_audience:
+            headers.update(serverless_identity_headers(self.service_audience))
+        return headers
 
     async def embed(self, *, model: str, inputs: list[str]) -> list[list[float]]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
