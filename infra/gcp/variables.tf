@@ -206,6 +206,17 @@ variable "external_authorization_required" {
   default     = true
 }
 
+variable "otlp_endpoint" {
+  description = "Optional OTLP/HTTP collector endpoint shared by Hermes API and DBOS worker."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.otlp_endpoint == "" || startswith(var.otlp_endpoint, "https://") || startswith(var.otlp_endpoint, "http://")
+    error_message = "otlp_endpoint must be empty or use HTTP(S)."
+  }
+}
+
 variable "allow_external_actions" {
   description = "Global kill switch for project mutations; keep false until approval/idempotency live tests pass."
   type        = bool
