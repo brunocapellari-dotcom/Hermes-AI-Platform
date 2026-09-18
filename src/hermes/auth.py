@@ -133,17 +133,24 @@ class GoogleIDTokenProvider:
             self._cache[audience] = (token, self._expiry(token))
             return token
 
-    def headers(self, audience: str) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.token(audience)}"}
+    def headers(self, audience: str, *, header: str = "Authorization") -> dict[str, str]:
+        return {header: f"Bearer {self.token(audience)}"}
 
 
 _default_token_provider = GoogleIDTokenProvider()
 
 
-def service_identity_headers(audience: str) -> dict[str, str]:
+def service_identity_headers(
+    audience: str, *, header: str = "Authorization"
+) -> dict[str, str]:
     if not audience.startswith("https://"):
         raise ValueError("service-to-service identity tokens require an HTTPS audience")
-    return _default_token_provider.headers(audience)
+    return _default_token_provider.headers(audience, header=header)
+
+
+def serverless_identity_headers(audience: str) -> dict[str, str]:
+    """Cloud Run IAM header that leaves Authorization available for app-layer auth."""
+    return service_identity_headers(audience, header="X-Serverless-Authorization")
 
 
 class ServiceAuthMiddleware:
