@@ -134,7 +134,7 @@ variable "openfga_model_id" {
 variable "external_authorization_required" {
   description = "Fail closed unless external OPA/OpenFGA authorization is configured for protected operations."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "allow_external_actions" {
