@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from hermes.domain import AgentSpec, ModelProfile
+from hermes.domain import AgentSpec, ModelProfile, SkillSpec
 from hermes.persistence import Database, RegistryRow
 
 
@@ -139,3 +139,23 @@ class PersistentAgentRegistry:
             elif include_sandbox and item.status == "sandbox" and agent.status == "sandbox":
                 agents.append(agent)
         return agents
+
+
+class PersistentSkillRegistry:
+    def __init__(self, registry: SqlRegistry) -> None:
+        self.registry = registry
+
+    def save(self, skill: SkillSpec, *, status: str = "active") -> None:
+        self.registry.upsert(
+            RegistryKind.SKILL,
+            skill.skill_id,
+            skill.model_dump(mode="json"),
+            status=status,
+        )
+
+    def load(self, *, include_inactive: bool = False) -> list[SkillSpec]:
+        skills: list[SkillSpec] = []
+        for item in self.registry.list(RegistryKind.SKILL):
+            if item.status == "active" or include_inactive:
+                skills.append(SkillSpec.model_validate(item.payload))
+        return skills
