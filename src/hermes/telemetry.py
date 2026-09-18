@@ -6,6 +6,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import Span
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
@@ -28,6 +32,21 @@ COST = Counter(
     "Tracked model cost in USD",
     ["project", "provider", "model"],
 )
+
+
+_TRACING_CONFIGURED = False
+
+
+def configure_tracing(endpoint: str | None, *, service_name: str = "hermes-ai-platform") -> None:
+    global _TRACING_CONFIGURED
+    if _TRACING_CONFIGURED or not endpoint:
+        return
+    if not endpoint.startswith(("http://", "https://")):
+        raise ValueError("OTLP endpoint must use HTTP(S)")
+    provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
+    trace.set_tracer_provider(provider)
+    _TRACING_CONFIGURED = True
 
 
 _TRACER = trace.get_tracer("hermes-ai-platform")
