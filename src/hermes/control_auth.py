@@ -71,6 +71,13 @@ PROTECTED_OPERATIONS: tuple[ProtectedOperation, ...] = (
     ),
     ProtectedOperation(
         "POST",
+        re.compile(r"^/v1/improvements/[^/]+/(?:reject|rollback)$"),
+        "improvement:lifecycle",
+        "can_manage_improvements",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
+        "POST",
         re.compile(r"^/v1/models/performance$"),
         "model:performance_record",
         "can_record_model_performance",
