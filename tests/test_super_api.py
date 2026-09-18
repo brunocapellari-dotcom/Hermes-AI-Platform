@@ -115,6 +115,47 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         skills = client.get("/v1/skills/active")
         assert [item["purpose"] for item in skills.json()] == ["normalize research packages"]
 
+        duplicate_agent = client.post(
+            "/v1/agents/promote",
+            json={
+                "spec": {
+                    "name": "Same Scope New Name",
+                    "project": "RESEARCH_AI",
+                    "mission": "  COORDINATE   RESEARCH packages ",
+                    "skills": ["research"],
+                    "tools": [],
+                    "permissions": {"read_scopes": ["research:read"]},
+                    "autonomy_level": 1,
+                    "risk": "low",
+                    "status": "sandbox",
+                },
+                "tests_passed": True,
+                "benchmark_passed": True,
+                "independent_review_passed": True,
+            },
+        )
+        assert duplicate_agent.status_code == 409
+        assert client.get("/v1/agents/duplicates").json()["duplicates"] == 0
+
+        duplicate_skill = client.post(
+            "/v1/skills/promote",
+            json={
+                "spec": {
+                    "purpose": " NORMALIZE research PACKAGES ",
+                    "inputs": ["research_package"],
+                    "outputs": ["normalized_package"],
+                    "procedure": ["VALIDATE", "normalize"],
+                    "validation": ["SCHEMA", "provenance"],
+                    "version": "2.0.0",
+                },
+                "tests_passed": True,
+                "benchmark_passed": True,
+                "independent_review_passed": True,
+            },
+        )
+        assert duplicate_skill.status_code == 409
+        assert client.get("/v1/skills/duplicates").json()["duplicates"] == 0
+
         registered = client.post(
             "/v1/mcp/servers",
             json={
