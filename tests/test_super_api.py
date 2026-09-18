@@ -94,6 +94,27 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         active = client.get("/v1/agents/active")
         assert [item["name"] for item in active.json()] == ["Research Coordinator"]
 
+        skill = client.post(
+            "/v1/skills/promote",
+            json={
+                "spec": {
+                    "purpose": "normalize research packages",
+                    "inputs": ["research_package"],
+                    "outputs": ["normalized_package"],
+                    "procedure": ["validate", "normalize"],
+                    "validation": ["schema", "provenance"],
+                    "version": "1.0.0",
+                },
+                "tests_passed": True,
+                "benchmark_passed": True,
+                "independent_review_passed": True,
+            },
+        )
+        assert skill.status_code == 200
+        assert skill.json()["version"] == "1.0.0"
+        skills = client.get("/v1/skills/active")
+        assert [item["purpose"] for item in skills.json()] == ["normalize research packages"]
+
         registered = client.post(
             "/v1/mcp/servers",
             json={
@@ -157,6 +178,9 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         assert [item["model_id"] for item in client.get("/v1/models").json()] == ["reasoning-a"]
         assert [item["name"] for item in client.get("/v1/agents/active").json()] == [
             "Research Coordinator"
+        ]
+        assert [item["purpose"] for item in client.get("/v1/skills/active").json()] == [
+            "normalize research packages"
         ]
         performance = client.post(
             "/v1/models/performance",
