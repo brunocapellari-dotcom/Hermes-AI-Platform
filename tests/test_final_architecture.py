@@ -28,6 +28,7 @@ class FakeResponse:
 
 class FakeSyncClient:
     payload = {"result": True}
+    calls = []
 
     def __init__(self, *args, **kwargs):
         pass
@@ -39,6 +40,7 @@ class FakeSyncClient:
         return False
 
     def post(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
         return FakeResponse(self.payload)
 
 
@@ -82,6 +84,31 @@ def test_composite_policy_local_and_external(monkeypatch) -> None:
     fga = OpenFGAClient("https://fga", "store")
     assert fga.authorize(request(resource="tool:x", relation="can_call")).allowed
     assert not fga.authorize(request()).allowed
+
+
+def test_private_policy_services_use_explicit_service_identity(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_SERVICE_TO_SERVICE_AUTH", "true")
+    monkeypatch.setattr("hermes.authorization.httpx.Client", FakeSyncClient)
+    monkeypatch.setattr(
+        "hermes.authorization.service_identity_headers",
+        lambda audience: {"Authorization": f"Bearer iam:{audience}"},
+    )
+    FakeSyncClient.calls = []
+    FakeSyncClient.payload = {"result": True}
+    OPAClient(
+        "https://opa",
+        "hermes/allow",
+        service_audience="https://opa.internal",
+    ).authorize(request())
+    assert FakeSyncClient.calls[-1][1]["headers"]["Authorization"] == "Bearer iam:https://opa.internal"
+
+    FakeSyncClient.payload = {"allowed": True}
+    OpenFGAClient(
+        "https://fga",
+        "store",
+        service_audience="https://fga.internal",
+    ).authorize(request(resource="tool:x", relation="can_call"))
+    assert FakeSyncClient.calls[-1][1]["headers"]["Authorization"] == "Bearer iam:https://fga.internal"
 
 
 def test_policy_clients_fail_closed(monkeypatch) -> None:
