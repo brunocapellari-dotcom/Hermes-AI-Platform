@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from hermes.ai_core import AIService
+from hermes.auth import authenticated_actor
 from hermes.authorization import build_policy_engine
 from hermes.cloud_sql import close_cloud_sql_resources
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
@@ -333,7 +334,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=503, detail="durable execution not configured")
         workflow_id = container.durable.enqueue(mission_id)
         container.audit.record(
-            "mission.dispatched", "owner", {"mission_id": mission_id, "workflow_id": workflow_id}
+            "mission.dispatched",
+            authenticated_actor("local-owner") or "local-owner",
+            {"mission_id": mission_id, "workflow_id": workflow_id},
         )
         return {"mission_id": mission_id, "workflow_id": workflow_id}
 
@@ -514,7 +517,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         result = container.project_validator.validate_registration(contract, payload.registration)
         if payload.persist and result.valid:
             container.registry.upsert(RegistryKind.PROJECT, payload.key, payload.registration)
-            container.audit.record("project.registered", "owner", {"project": payload.key})
+            container.audit.record(
+                "project.registered",
+                authenticated_actor("local-owner") or "local-owner",
+                {"project": payload.key},
+            )
         return result.model_dump()
 
     @api.get("/v1/world-state")
