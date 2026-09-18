@@ -37,7 +37,7 @@ from hermes.routing import ProjectRouter
 from hermes.security import PromptInjectionDetector
 from hermes.self_improvement import ImprovementProposal, PersistentImprovementEngine
 from hermes.super_control import SuperControlPlane, build_super_router
-from hermes.telemetry import SqlUsageStore, prometheus_payload
+from hermes.telemetry import SqlUsageStore, configure_tracing, prometheus_payload
 from hermes.world_state import WorldStateBuilder
 
 
@@ -140,6 +140,7 @@ class ProjectRegistrationRequest(BaseModel):
 class AppContainer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        configure_tracing(settings.otlp_endpoint)
         self.db = Database(settings.database_url)
         if (
             settings.auto_create_schema
