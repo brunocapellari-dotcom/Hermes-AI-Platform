@@ -88,6 +88,9 @@ def test_id_token_provider_caches_valid_token() -> None:
     assert provider.token("https://project.internal") == token
     assert calls == ["https://project.internal"]
     assert provider.headers("https://project.internal")["Authorization"].startswith("Bearer ")
+    assert provider.headers(
+        "https://project.internal", header="X-Serverless-Authorization"
+    )["X-Serverless-Authorization"].startswith("Bearer ")
 
 
 def test_google_oidc_verifier_validates_claim_contract() -> None:
