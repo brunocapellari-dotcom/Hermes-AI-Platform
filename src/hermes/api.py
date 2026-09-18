@@ -207,6 +207,8 @@ class AppContainer:
             openfga_url=settings.openfga_url,
             openfga_store_id=settings.openfga_store_id,
             openfga_model_id=settings.openfga_model_id,
+            opa_audience=settings.opa_audience,
+            openfga_audience=settings.openfga_audience,
             external_required=settings.external_authorization_required,
             timeout=settings.authorization_timeout_seconds,
         )
