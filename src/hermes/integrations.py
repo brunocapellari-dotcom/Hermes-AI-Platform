@@ -6,7 +6,11 @@ from typing import Any, cast
 
 import httpx
 
-from hermes.auth import outbound_service_auth_enabled, service_identity_headers
+from hermes.auth import (
+    outbound_service_auth_enabled,
+    serverless_identity_headers,
+    service_identity_headers,
+)
 from hermes.contracts import CompletionResult
 from hermes.domain import Evidence
 from hermes.research import ResearchPackage, ResearchRequest
@@ -67,13 +71,27 @@ def _completion_result(data: Mapping[str, Any]) -> CompletionResult:
 
 
 class OpenAICompatibleGateway:
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 20.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        timeout: float = 20.0,
+        *,
+        service_audience: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
+        self.service_audience = service_audience
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        if outbound_service_auth_enabled() and self.service_audience:
+            headers.update(serverless_identity_headers(self.service_audience))
+        return headers
 
     async def complete_metered(self, *, model: str, system: str, user: str) -> CompletionResult:
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        headers = self._headers()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/chat/completions",
