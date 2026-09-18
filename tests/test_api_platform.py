@@ -131,6 +131,14 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
                 "registration": {
                     "base_url": "https://agrolog.test",
                     "capabilities": ["freight_analysis"],
+                    "endpoints": [
+                        "/health",
+                        "/v1/status",
+                        "/v1/capabilities",
+                        "/v1/query",
+                        "/v1/search",
+                        "/v1/alerts",
+                    ],
                     "allow_execute": False,
                 },
             },
