@@ -108,6 +108,9 @@ class SuperControlPlane:
         return profile
 
     def promote_agent(self, payload: AgentPromotionRequest) -> AgentSpec:
+        duplicate = self.agents.find_equivalent(payload.spec)
+        if duplicate is not None:
+            raise ValueError(f"equivalent active agent already exists: {duplicate.agent_id}")
         audit = self.agent_auditor.audit(
             payload.spec,
             tests_passed=payload.tests_passed,
@@ -125,6 +128,9 @@ class SuperControlPlane:
         return promoted
 
     def promote_skill(self, payload: SkillPromotionRequest) -> SkillSpec:
+        duplicate = self.skills.find_equivalent(payload.spec)
+        if duplicate is not None:
+            raise ValueError(f"equivalent active skill already exists: {duplicate.skill_id}")
         audit = self.skill_auditor.audit(
             payload.spec,
             tests_passed=payload.tests_passed,
@@ -183,6 +189,11 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
     def active_agents() -> list[dict[str, Any]]:
         return [agent.model_dump(mode="json") for agent in control.agents.load()]
 
+    @router.get("/v1/agents/duplicates")
+    def duplicate_agents() -> dict[str, Any]:
+        groups = control.agents.duplicate_groups()
+        return {"duplicate_groups": groups, "duplicates": sum(len(group) - 1 for group in groups)}
+
     @router.post("/v1/skills/promote")
     def promote_skill(payload: SkillPromotionRequest) -> dict[str, Any]:
         try:
@@ -193,6 +204,11 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
     @router.get("/v1/skills/active")
     def active_skills() -> list[dict[str, Any]]:
         return [skill.model_dump(mode="json") for skill in control.skills.load()]
+
+    @router.get("/v1/skills/duplicates")
+    def duplicate_skills() -> dict[str, Any]:
+        groups = control.skills.duplicate_groups()
+        return {"duplicate_groups": groups, "duplicates": sum(len(group) - 1 for group in groups)}
 
     @router.post("/v1/security/privacy")
     def privacy(payload: PrivacyInspectRequest) -> dict[str, Any]:
