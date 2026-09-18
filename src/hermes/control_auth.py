@@ -20,13 +20,62 @@ class ProtectedOperation:
 
 
 PROTECTED_OPERATIONS: tuple[ProtectedOperation, ...] = (
-    ProtectedOperation("POST", re.compile(r"^/v1/missions/[^/]+/dispatch$"), "mission:dispatch", "can_dispatch", RiskLevel.MEDIUM),
-    ProtectedOperation("POST", re.compile(r"^/v1/projects/validate$"), "project:register", "can_manage_projects", RiskLevel.HIGH),
-    ProtectedOperation("POST", re.compile(r"^/v1/models/register$"), "model:register", "can_manage_models", RiskLevel.HIGH),
-    ProtectedOperation("POST", re.compile(r"^/v1/agents/promote$"), "agent:promote", "can_manage_agents", RiskLevel.HIGH),
-    ProtectedOperation("POST", re.compile(r"^/v1/mcp/servers$"), "tool:register", "can_manage_tools", RiskLevel.HIGH),
-    ProtectedOperation("POST", re.compile(r"^/v1/improvements/advance$"), "improvement:advance", "can_manage_improvements", RiskLevel.HIGH),
-    ProtectedOperation("POST", re.compile(r"^/v1/models/performance$"), "model:performance_record", "can_record_model_performance", RiskLevel.MEDIUM),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/missions/[^/]+/dispatch$"),
+        "mission:dispatch",
+        "can_dispatch",
+        RiskLevel.MEDIUM,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/projects/validate$"),
+        "project:register",
+        "can_manage_projects",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/models/register$"),
+        "model:register",
+        "can_manage_models",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/agents/promote$"),
+        "agent:promote",
+        "can_manage_agents",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/skills/promote$"),
+        "skill:promote",
+        "can_manage_skills",
+        RiskLevel.MEDIUM,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/mcp/servers$"),
+        "tool:register",
+        "can_manage_tools",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/improvements/advance$"),
+        "improvement:advance",
+        "can_manage_improvements",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/models/performance$"),
+        "model:performance_record",
+        "can_record_model_performance",
+        RiskLevel.MEDIUM,
+    ),
 )
 
 
@@ -43,7 +92,14 @@ class ControlPlaneAuthorizationMiddleware:
 
     def __init__(
         self,
-        app: Callable[[dict[str, Any], Callable[[], Awaitable[dict[str, Any]]], Callable[[dict[str, Any]], Awaitable[None]]], Awaitable[None]],
+        app: Callable[
+            [
+                dict[str, Any],
+                Callable[[], Awaitable[dict[str, Any]]],
+                Callable[[dict[str, Any]], Awaitable[None]],
+            ],
+            Awaitable[None],
+        ],
         *,
         policy: PolicyEngine,
     ) -> None:
@@ -53,7 +109,16 @@ class ControlPlaneAuthorizationMiddleware:
     @staticmethod
     async def _forbidden(send: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
         body = b'{"detail":"forbidden"}'
-        await send({"type": "http.response.start", "status": 403, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode("ascii"))]})
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            }
+        )
         await send({"type": "http.response.body", "body": body})
 
     async def __call__(
@@ -65,12 +130,24 @@ class ControlPlaneAuthorizationMiddleware:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
-        operation = protected_operation(str(scope.get("method", "GET")), str(scope.get("path", "")))
+        operation = protected_operation(
+            str(scope.get("method", "GET")), str(scope.get("path", ""))
+        )
         if operation is None:
             await self.app(scope, receive, send)
             return
         actor = authenticated_actor("local-owner") or "local-owner"
-        decision = self.policy.authorize(PolicyRequest(actor=actor, subject=actor, action=operation.action, resource=f"hermes:{scope.get('path', '')}", relation=operation.relation, risk=operation.risk, trust=TrustLevel.TRUSTED))
+        decision = self.policy.authorize(
+            PolicyRequest(
+                actor=actor,
+                subject=actor,
+                action=operation.action,
+                resource=f"hermes:{scope.get('path', '')}",
+                relation=operation.relation,
+                risk=operation.risk,
+                trust=TrustLevel.TRUSTED,
+            )
+        )
         if not decision.allowed or decision.requires_approval:
             await self._forbidden(send)
             return
