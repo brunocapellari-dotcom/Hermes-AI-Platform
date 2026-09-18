@@ -43,8 +43,18 @@ resource "google_cloud_run_v2_worker_pool" "hermes_worker" {
       }
 
       env {
+        name  = "HERMES_OPA_AUDIENCE"
+        value = var.opa_audience
+      }
+
+      env {
         name  = "HERMES_OPENFGA_URL"
         value = var.openfga_url
+      }
+
+      env {
+        name  = "HERMES_OPENFGA_AUDIENCE"
+        value = var.openfga_audience
       }
 
       env {
