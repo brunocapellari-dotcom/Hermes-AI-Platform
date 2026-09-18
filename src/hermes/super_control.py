@@ -8,13 +8,19 @@ from pydantic import BaseModel, Field
 from hermes.agent_routing import AgentRouteRequest, AgentRouter
 from hermes.auth import authenticated_actor
 from hermes.deliberation import DeliberationCandidate, DeliberationEngine
-from hermes.domain import AgentSpec, ModelProfile
-from hermes.factories import AgentAuditor
+from hermes.domain import AgentSpec, ModelProfile, SkillSpec
+from hermes.factories import AgentAuditor, SkillAuditor
 from hermes.mcp_security import MCPServerSpec, MCPSecurityGateway, MCPToolCall
 from hermes.model_intelligence import ModelPerformanceSample, PersistentModelIntelligence
 from hermes.persistence import SqlAuditSink
 from hermes.privacy import SensitiveDataGuard
-from hermes.registry import PersistentAgentRegistry, PersistentModelRegistry, RegistryKind, SqlRegistry
+from hermes.registry import (
+    PersistentAgentRegistry,
+    PersistentModelRegistry,
+    PersistentSkillRegistry,
+    RegistryKind,
+    SqlRegistry,
+)
 
 
 class PrivacyInspectRequest(BaseModel):
@@ -40,6 +46,13 @@ class AgentPromotionRequest(BaseModel):
     external_action_approved: bool = False
 
 
+class SkillPromotionRequest(BaseModel):
+    spec: SkillSpec
+    tests_passed: bool
+    benchmark_passed: bool
+    independent_review_passed: bool
+
+
 class SuperControlPlane:
     def __init__(
         self,
@@ -55,7 +68,9 @@ class SuperControlPlane:
         self.privacy = privacy
         self.models = PersistentModelRegistry(registry)
         self.agents = PersistentAgentRegistry(registry)
+        self.skills = PersistentSkillRegistry(registry)
         self.agent_auditor = AgentAuditor()
+        self.skill_auditor = SkillAuditor()
         self.mcp = MCPSecurityGateway()
         self.deliberation = DeliberationEngine()
         self._hydrate_mcp()
@@ -103,6 +118,22 @@ class SuperControlPlane:
         )
         return promoted
 
+    def promote_skill(self, payload: SkillPromotionRequest) -> SkillSpec:
+        audit = self.skill_auditor.audit(
+            payload.spec,
+            tests_passed=payload.tests_passed,
+            benchmark_passed=payload.benchmark_passed,
+            independent_review_passed=payload.independent_review_passed,
+        )
+        promoted = self.skill_auditor.promote(payload.spec, audit)
+        self.skills.save(promoted, status="active")
+        self.audit.record(
+            "skill.promoted",
+            self._actor(),
+            {"skill_id": promoted.skill_id, "version": promoted.version},
+        )
+        return promoted
+
     def register_mcp(self, spec: MCPServerSpec) -> MCPServerSpec:
         self.mcp.register(spec)
         self.registry.upsert(
@@ -124,7 +155,9 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
     @router.post("/v1/models/performance")
     def model_performance(payload: ModelPerformanceSample) -> dict[str, Any]:
         control.intelligence.record(payload)
-        return control.intelligence.summarize(payload.model_id, payload.task_class).model_dump(mode="json")
+        return control.intelligence.summarize(
+            payload.model_id, payload.task_class
+        ).model_dump(mode="json")
 
     @router.post("/v1/agents/promote")
     def promote_agent(payload: AgentPromotionRequest) -> dict[str, Any]:
@@ -143,6 +176,17 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
     @router.get("/v1/agents/active")
     def active_agents() -> list[dict[str, Any]]:
         return [agent.model_dump(mode="json") for agent in control.agents.load()]
+
+    @router.post("/v1/skills/promote")
+    def promote_skill(payload: SkillPromotionRequest) -> dict[str, Any]:
+        try:
+            return control.promote_skill(payload).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @router.get("/v1/skills/active")
+    def active_skills() -> list[dict[str, Any]]:
+        return [skill.model_dump(mode="json") for skill in control.skills.load()]
 
     @router.post("/v1/security/privacy")
     def privacy(payload: PrivacyInspectRequest) -> dict[str, Any]:
