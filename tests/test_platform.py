@@ -15,6 +15,7 @@ from hermes.self_improvement import (
     ControlledImprovementEngine,
     ImprovementProposal,
     ImprovementStage,
+    PersistentImprovementEngine,
 )
 from hermes.telemetry import SqlUsageStore, UsageEvent, prometheus_payload
 from hermes.world_state import WorldStateBuilder
@@ -167,6 +168,47 @@ def test_controlled_self_improvement_requires_gates_and_supports_rollback() -> N
         engine.advance(rejected)
     with pytest.raises(ValueError):
         engine.rollback(rejected)
+
+
+def test_persistent_self_improvement_is_server_authoritative(tmp_path: Path) -> None:
+    db = make_db(tmp_path, "improvement.db")
+    registry = SqlRegistry(db)
+    engine = PersistentImprovementEngine(registry)
+    proposal = ImprovementProposal(
+        proposal_id="p1",
+        target="router",
+        description="adaptive routing v2",
+        previous_version="1",
+        proposed_version="2",
+    )
+
+    assert engine.advance(proposal).stage == ImprovementStage.SANDBOX
+    restored = PersistentImprovementEngine(registry)
+    assert restored.get("p1").stage == ImprovementStage.SANDBOX  # type: ignore[union-attr]
+
+    injected = proposal.model_copy(update={"stage": ImprovementStage.AUDIT})
+    assert restored.advance(injected).stage == ImprovementStage.TESTS
+    with pytest.raises(ValueError, match="tests"):
+        restored.advance(injected)
+
+    gates = injected.model_copy(update={"tests_passed": True})
+    assert restored.advance(gates).stage == ImprovementStage.BENCHMARK
+    gates.benchmark_improved = True
+    assert restored.advance(gates).stage == ImprovementStage.AB
+    assert restored.advance(gates).stage == ImprovementStage.AUDIT
+    gates.independent_audit_passed = True
+    assert restored.advance(gates).stage == ImprovementStage.PROMOTED
+    assert restored.rollback("p1").stage == ImprovementStage.ROLLED_BACK
+
+    with pytest.raises(ValueError, match="PROPOSED"):
+        PersistentImprovementEngine(registry).advance(
+            ImprovementProposal(
+                proposal_id="skip",
+                target="x",
+                description="skip",
+                stage=ImprovementStage.AUDIT,
+            )
+        )
 
 
 class FallbackGateway:
