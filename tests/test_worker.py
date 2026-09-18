@@ -4,7 +4,12 @@ from typing import Any
 from hermes.domain import ActionType, Intent, Mission, MissionStatus, RiskLevel, TaskNode, TaskStatus
 from hermes.persistence import Database, SqlMissionStore
 from hermes.registry import RegistryKind, SqlRegistry
-from hermes.worker import _ready_task_wave, execute_project_task_step, update_task_state_step
+from hermes.worker import (
+    _dbos_runtime_config,
+    _ready_task_wave,
+    execute_project_task_step,
+    update_task_state_step,
+)
 
 
 class FakeResponse:
@@ -175,3 +180,20 @@ def test_dependency_wave_propagates_failed_dependency() -> None:
     ready, blockers = _ready_task_wave(mission_with([root, child]))
     assert ready == []
     assert "did not complete" in blockers[child.task_id]
+
+
+def test_dbos_runtime_never_migrates_and_can_export_otlp(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_OTLP_ENDPOINT", "https://otel.example/v1/traces")
+    config = _dbos_runtime_config("postgresql://example")
+    assert config["run_migrations"] is False
+    assert config["enable_otlp"] is True
+    assert config["otlp_traces_endpoints"] == ["https://otel.example/v1/traces"]
+    assert config["otel_attribute_format"] == "semconv"
+
+
+def test_dbos_runtime_rejects_invalid_otlp_endpoint(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_OTLP_ENDPOINT", "file:///tmp/trace")
+    import pytest
+
+    with pytest.raises(ValueError, match="HTTP"):
+        _dbos_runtime_config("postgresql://example")
