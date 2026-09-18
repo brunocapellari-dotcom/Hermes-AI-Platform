@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
+from opentelemetry import trace
+from opentelemetry.trace import Span
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -24,6 +28,20 @@ COST = Counter(
     "Tracked model cost in USD",
     ["project", "provider", "model"],
 )
+
+
+_TRACER = trace.get_tracer("hermes-ai-platform")
+
+
+@contextmanager
+def traced(
+    name: str,
+    attributes: Mapping[str, str | int | float | bool] | None = None,
+) -> Iterator[Span]:
+    with _TRACER.start_as_current_span(name) as span:
+        for key, value in (attributes or {}).items():
+            span.set_attribute(key, value)
+        yield span
 
 
 class UsageEvent(BaseModel):
