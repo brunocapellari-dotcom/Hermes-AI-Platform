@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     auto_create_schema: bool = False
     request_timeout_seconds: float = 20.0
     authorization_timeout_seconds: float = 5.0
+    otlp_endpoint: str | None = None
 
     @property
     def is_production(self) -> bool:
