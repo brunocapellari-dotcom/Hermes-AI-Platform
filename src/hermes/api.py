@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from hermes.ai_core import AIService
 from hermes.authorization import build_policy_engine
+from hermes.cloud_sql import close_cloud_sql_resources
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
 from hermes.config import Settings, get_settings
 from hermes.context import ContextItem, ContextRouter
@@ -253,7 +254,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        yield
+        try:
+            yield
+        finally:
+            if container.durable is not None:
+                container.durable.close()
+            container.db.close()
+            close_cloud_sql_resources()
 
     api = FastAPI(title="Hermes AI Platform", version="0.1.0", lifespan=lifespan)
     api.state.container = container
