@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import httpx
 
-from hermes.auth import authenticated_actor
+from hermes.auth import authenticated_actor, outbound_service_auth_enabled, service_identity_headers
 from hermes.domain import PolicyDecision, PolicyRequest
 from hermes.security import DefaultPolicyEngine, PolicyEngine
 
@@ -12,16 +12,30 @@ from hermes.security import DefaultPolicyEngine, PolicyEngine
 class OPAClient:
     """Fail-closed OPA Data API authorizer."""
 
-    def __init__(self, base_url: str, policy_path: str, timeout: float = 5.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        policy_path: str,
+        timeout: float = 5.0,
+        *,
+        service_audience: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.policy_path = policy_path.strip("/")
         self.timeout = timeout
+        self.service_audience = service_audience
+
+    def _headers(self) -> dict[str, str]:
+        if outbound_service_auth_enabled() and self.service_audience:
+            return service_identity_headers(self.service_audience)
+        return {}
 
     def authorize(self, request: PolicyRequest) -> PolicyDecision:
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.post(
                     f"{self.base_url}/v1/data/{self.policy_path}",
+                    headers=self._headers(),
                     json={"input": request.model_dump(mode="json")},
                 )
                 response.raise_for_status()
@@ -55,11 +69,18 @@ class OpenFGAClient:
         *,
         authorization_model_id: str | None = None,
         timeout: float = 5.0,
+        service_audience: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.store_id = store_id
         self.authorization_model_id = authorization_model_id
         self.timeout = timeout
+        self.service_audience = service_audience
+
+    def _headers(self) -> dict[str, str]:
+        if outbound_service_auth_enabled() and self.service_audience:
+            return service_identity_headers(self.service_audience)
+        return {}
 
     @staticmethod
     def _subject(actor: str) -> str:
@@ -81,6 +102,7 @@ class OpenFGAClient:
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.post(
                     f"{self.base_url}/stores/{self.store_id}/check",
+                    headers=self._headers(),
                     json=body,
                 )
                 response.raise_for_status()
@@ -142,16 +164,23 @@ def build_policy_engine(
     openfga_url: str | None = None,
     openfga_store_id: str | None = None,
     openfga_model_id: str | None = None,
+    opa_audience: str | None = None,
+    openfga_audience: str | None = None,
     external_required: bool = False,
     timeout: float = 5.0,
 ) -> CompositePolicyEngine:
-    opa = OPAClient(opa_url, opa_policy_path, timeout) if opa_url else None
+    opa = (
+        OPAClient(opa_url, opa_policy_path, timeout, service_audience=opa_audience)
+        if opa_url
+        else None
+    )
     openfga = (
         OpenFGAClient(
             openfga_url,
             openfga_store_id,
             authorization_model_id=openfga_model_id,
             timeout=timeout,
+            service_audience=openfga_audience,
         )
         if openfga_url and openfga_store_id
         else None
