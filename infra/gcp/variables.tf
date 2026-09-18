@@ -50,18 +50,36 @@ variable "service_auth_audience" {
   description = "Stable custom OIDC audience for service-to-service Hermes calls."
   type        = string
   default     = "https://hermes.internal"
+
+  validation {
+    condition     = startswith(var.service_auth_audience, "https://")
+    error_message = "service_auth_audience must use HTTPS."
+  }
 }
 
 variable "service_invoker_members" {
   description = "Explicit IAM members allowed to invoke the private Hermes Cloud Run API. Empty keeps the service ungranted by this stack."
   type        = set(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for member in var.service_invoker_members :
+      member != "allUsers" && member != "allAuthenticatedUsers"
+    ])
+    error_message = "Hermes must not grant public or all-authenticated Cloud Run invocation."
+  }
 }
 
 variable "model_gateway_url" {
   description = "OpenAI-compatible model gateway URL, typically LiteLLM. Empty keeps generation disabled."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.model_gateway_url == "" || startswith(var.model_gateway_url, "https://")
+    error_message = "model_gateway_url must be empty or use HTTPS."
+  }
 }
 
 variable "model_gateway_api_key_secret_version" {
@@ -104,21 +122,41 @@ variable "rerank_model" {
 variable "second_brain_url" {
   type    = string
   default = ""
+
+  validation {
+    condition     = var.second_brain_url == "" || startswith(var.second_brain_url, "https://")
+    error_message = "second_brain_url must be empty or use HTTPS."
+  }
 }
 
 variable "research_url" {
   type    = string
   default = ""
+
+  validation {
+    condition     = var.research_url == "" || startswith(var.research_url, "https://")
+    error_message = "research_url must be empty or use HTTPS."
+  }
 }
 
 variable "opa_url" {
   type    = string
   default = ""
+
+  validation {
+    condition     = var.opa_url == "" || startswith(var.opa_url, "https://")
+    error_message = "opa_url must be empty or use HTTPS."
+  }
 }
 
 variable "openfga_url" {
   type    = string
   default = ""
+
+  validation {
+    condition     = var.openfga_url == "" || startswith(var.openfga_url, "https://")
+    error_message = "openfga_url must be empty or use HTTPS."
+  }
 }
 
 variable "openfga_store_id" {
