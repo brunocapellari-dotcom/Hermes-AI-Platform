@@ -93,13 +93,19 @@ class SuperControlPlane:
                 )
 
     def register_model(self, payload: ModelRegistrationRequest) -> ModelProfile:
-        self.models.save(payload.profile, status=payload.status)
+        profile = payload.profile.model_copy(
+            update={
+                "status": payload.status,
+                "available": payload.status == "active" and payload.profile.available,
+            }
+        )
+        self.models.save(profile, status=payload.status)
         self.audit.record(
             "model.registered",
             self._actor(),
-            {"model_id": payload.profile.model_id, "status": payload.status},
+            {"model_id": profile.model_id, "status": payload.status},
         )
-        return payload.profile
+        return profile
 
     def promote_agent(self, payload: AgentPromotionRequest) -> AgentSpec:
         audit = self.agent_auditor.audit(
