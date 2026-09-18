@@ -79,6 +79,7 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          version: v0.74.0
           scanners: misconfig
           severity: HIGH,CRITICAL
           exit-code: "1"
@@ -99,6 +100,7 @@ jobs:
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: hermes-ai-platform:ci
+          syft-version: v1.52.0
           format: cyclonedx-json
           output-file: sbom.cdx.json
           upload-artifact: false
@@ -119,6 +121,7 @@ jobs:
         with:
           scan-type: image
           image-ref: hermes-ai-platform:ci
+          version: v0.74.0
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: "false"
