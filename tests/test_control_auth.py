@@ -24,6 +24,19 @@ def test_protected_operation_map_is_specific() -> None:
     operation = protected_operation("POST", "/v1/missions/abc/dispatch")
     assert operation is not None
     assert operation.relation == "can_dispatch"
+    expected = {
+        "/v1/projects/validate": "can_manage_projects",
+        "/v1/models/register": "can_manage_models",
+        "/v1/agents/promote": "can_manage_agents",
+        "/v1/skills/promote": "can_manage_skills",
+        "/v1/mcp/servers": "can_manage_tools",
+        "/v1/improvements/advance": "can_manage_improvements",
+        "/v1/models/performance": "can_record_model_performance",
+    }
+    for path, relation in expected.items():
+        protected = protected_operation("POST", path)
+        assert protected is not None
+        assert protected.relation == relation
     assert protected_operation("GET", "/v1/missions/abc/dispatch") is None
     assert protected_operation("POST", "/v1/chat") is None
 
@@ -55,6 +68,7 @@ def test_control_plane_policy_allows_authenticated_subject() -> None:
     assert sent == []
     assert policy.requests[0].subject == "service:owner"
     assert policy.requests[0].relation == "can_manage_projects"
+    assert policy.requests[0].resource == "hermes:control"
 
 
 def test_control_plane_policy_denies_without_calling_app() -> None:
