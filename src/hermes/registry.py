@@ -118,6 +118,36 @@ class PersistentModelRegistry:
         return profiles
 
 
+def _normalized_text(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def _agent_fingerprint(agent: AgentSpec) -> str:
+    payload = {
+        "project": agent.project,
+        "mission": _normalized_text(agent.mission),
+        "skills": sorted(set(agent.skills)),
+        "tools": sorted(set(agent.tools)),
+        "permissions": agent.permissions.model_dump(mode="json"),
+        "autonomy_level": agent.autonomy_level,
+        "risk": agent.risk.value,
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
+
+
+def _skill_fingerprint(skill: SkillSpec) -> str:
+    payload = {
+        "purpose": _normalized_text(skill.purpose),
+        "inputs": list(skill.inputs),
+        "outputs": list(skill.outputs),
+        "procedure": [_normalized_text(item) for item in skill.procedure],
+        "tools": sorted(set(skill.tools)),
+        "validation": [_normalized_text(item) for item in skill.validation],
+        "failure_modes": [_normalized_text(item) for item in skill.failure_modes],
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
+
+
 class PersistentAgentRegistry:
     def __init__(self, registry: SqlRegistry) -> None:
         self.registry = registry
@@ -140,6 +170,24 @@ class PersistentAgentRegistry:
                 agents.append(agent)
         return agents
 
+    def find_equivalent(self, candidate: AgentSpec) -> AgentSpec | None:
+        fingerprint = _agent_fingerprint(candidate)
+        return next(
+            (
+                agent
+                for agent in self.load()
+                if agent.agent_id != candidate.agent_id
+                and _agent_fingerprint(agent) == fingerprint
+            ),
+            None,
+        )
+
+    def duplicate_groups(self) -> list[list[str]]:
+        groups: dict[str, list[str]] = {}
+        for agent in self.load():
+            groups.setdefault(_agent_fingerprint(agent), []).append(agent.agent_id)
+        return [sorted(ids) for ids in groups.values() if len(ids) > 1]
+
 
 class PersistentSkillRegistry:
     def __init__(self, registry: SqlRegistry) -> None:
@@ -159,3 +207,21 @@ class PersistentSkillRegistry:
             if item.status == "active" or include_inactive:
                 skills.append(SkillSpec.model_validate(item.payload))
         return skills
+
+    def find_equivalent(self, candidate: SkillSpec) -> SkillSpec | None:
+        fingerprint = _skill_fingerprint(candidate)
+        return next(
+            (
+                skill
+                for skill in self.load()
+                if skill.skill_id != candidate.skill_id
+                and _skill_fingerprint(skill) == fingerprint
+            ),
+            None,
+        )
+
+    def duplicate_groups(self) -> list[list[str]]:
+        groups: dict[str, list[str]] = {}
+        for skill in self.load():
+            groups.setdefault(_skill_fingerprint(skill), []).append(skill.skill_id)
+        return [sorted(ids) for ids in groups.values() if len(ids) > 1]
