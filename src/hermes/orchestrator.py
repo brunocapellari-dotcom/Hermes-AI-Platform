@@ -8,6 +8,7 @@ from hermes.contracts import AuditSink, KnowledgeProvider, MissionStore, Researc
 from hermes.domain import Mission
 from hermes.research import ResearchRequest
 from hermes.routing import ProjectRouter
+from hermes.telemetry import traced
 
 
 class HermesOrchestrator:
@@ -33,7 +34,8 @@ class HermesOrchestrator:
 
     async def create_mission(self, request: str, *, actor: str = "owner") -> Mission:
         actor = authenticated_actor(actor) or actor
-        intent = await self.intent_engine.analyze(request)
+        with traced("hermes.intent.analyze", {"hermes.request.length": len(request)}):
+            intent = await self.intent_engine.analyze(request)
         projects = self.project_router.route(intent.capabilities)
         routed_projects = set(projects.values())
         research_project = next(iter(routed_projects)) if len(routed_projects) == 1 else None
@@ -43,7 +45,8 @@ class HermesOrchestrator:
         research_package_status: str | None = None
         research_evidence_count = 0
         if self.knowledge is not None:
-            evidence = await self.knowledge.search(intent.goal)
+            with traced("hermes.knowledge.search", {"hermes.goal": intent.goal[:256]}):
+                evidence = await self.knowledge.search(intent.goal)
         if (intent.requires_research or not self.gaps.sufficient(evidence)) and self.research is not None:
             research_request = ResearchRequest(
                 project=research_project,
@@ -52,7 +55,14 @@ class HermesOrchestrator:
                 urgency=intent.urgency,
                 desired_output="research_package",
             )
-            package = await self.research.research(research_request)
+            with traced(
+                "hermes.research.handoff",
+                {
+                    "hermes.research.request_id": research_request.request_id,
+                    "hermes.research.urgency": research_request.urgency,
+                },
+            ):
+                package = await self.research.research(research_request)
             evidence.extend(package.evidence)
             research_triggered = True
             research_request_id = research_request.request_id
