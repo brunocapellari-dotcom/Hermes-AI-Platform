@@ -52,6 +52,12 @@ variable "service_auth_audience" {
   default     = "https://hermes.internal"
 }
 
+variable "service_invoker_members" {
+  description = "Explicit IAM members allowed to invoke the private Hermes Cloud Run API. Empty keeps the service ungranted by this stack."
+  type        = set(string)
+  default     = []
+}
+
 variable "model_gateway_url" {
   description = "OpenAI-compatible model gateway URL, typically LiteLLM. Empty keeps generation disabled."
   type        = string
