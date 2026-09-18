@@ -166,6 +166,7 @@ class AppContainer:
                 settings.model_gateway_url,
                 api_key=api_key,
                 timeout=settings.request_timeout_seconds,
+                service_audience=settings.model_gateway_audience,
             )
             if settings.model_gateway_url
             else None
@@ -175,6 +176,7 @@ class AppContainer:
                 settings.model_gateway_url,
                 api_key=api_key,
                 timeout=settings.request_timeout_seconds,
+                service_audience=settings.model_gateway_audience,
             )
             if settings.model_gateway_url
             else None
