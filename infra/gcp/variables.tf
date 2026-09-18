@@ -160,6 +160,16 @@ variable "opa_url" {
   }
 }
 
+variable "opa_audience" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.opa_audience == "" || startswith(var.opa_audience, "https://")
+    error_message = "opa_audience must be empty or use HTTPS."
+  }
+}
+
 variable "openfga_url" {
   type    = string
   default = ""
@@ -167,6 +177,16 @@ variable "openfga_url" {
   validation {
     condition     = var.openfga_url == "" || startswith(var.openfga_url, "https://")
     error_message = "openfga_url must be empty or use HTTPS."
+  }
+}
+
+variable "openfga_audience" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.openfga_audience == "" || startswith(var.openfga_audience, "https://")
+    error_message = "openfga_audience must be empty or use HTTPS."
   }
 }
 
