@@ -9,7 +9,7 @@ from hermes.domain import ModelClass, ModelProfile, ModelRouteRequest, RouteDeci
 from hermes.model_intelligence import ModelIntelligence, ModelPerformanceSample
 from hermes.privacy import SensitiveDataGuard
 from hermes.routing import CircuitBreaker, ModelRouter
-from hermes.telemetry import SqlUsageStore, UsageEvent
+from hermes.telemetry import SqlUsageStore, UsageEvent, traced
 
 
 @dataclass(frozen=True)
@@ -88,6 +88,47 @@ class AIService:
             )
         )
 
+    async def _invoke_gateway(
+        self,
+        *,
+        profile: ModelProfile,
+        system: str,
+        user: str,
+        mission_id: str | None,
+        project: str | None,
+        task_class: ModelClass,
+    ) -> tuple[str, int, int]:
+        attributes: dict[str, str | int | float | bool] = {
+            "hermes.model.id": profile.model_id,
+            "hermes.model.provider": profile.provider,
+            "hermes.model.class": task_class.value,
+            "hermes.model.local": profile.local,
+        }
+        if mission_id:
+            attributes["hermes.mission.id"] = mission_id
+        if project:
+            attributes["hermes.project"] = project
+        with traced("hermes.ai.model_attempt", attributes) as span:
+            try:
+                if isinstance(self.gateway, MeteredModelGateway):
+                    completion = await self.gateway.complete_metered(
+                        model=profile.model,
+                        system=system,
+                        user=user,
+                    )
+                    span.set_attribute("hermes.tokens.input", completion.input_tokens)
+                    span.set_attribute("hermes.tokens.output", completion.output_tokens)
+                    return completion.content, completion.input_tokens, completion.output_tokens
+                content = await self.gateway.complete(
+                    model=profile.model,
+                    system=system,
+                    user=user,
+                )
+                return content, 0, 0
+            except Exception as exc:
+                span.record_exception(exc)
+                raise
+
     async def generate(
         self,
         *,
@@ -147,21 +188,14 @@ class AIService:
             input_tokens = 0
             output_tokens = 0
             try:
-                if isinstance(self.gateway, MeteredModelGateway):
-                    completion = await self.gateway.complete_metered(
-                        model=profile.model,
-                        system=outbound_system,
-                        user=outbound_user,
-                    )
-                    content = completion.content
-                    input_tokens = completion.input_tokens
-                    output_tokens = completion.output_tokens
-                else:
-                    content = await self.gateway.complete(
-                        model=profile.model,
-                        system=outbound_system,
-                        user=outbound_user,
-                    )
+                content, input_tokens, output_tokens = await self._invoke_gateway(
+                    profile=profile,
+                    system=outbound_system,
+                    user=outbound_user,
+                    mission_id=mission_id,
+                    project=project,
+                    task_class=task_class,
+                )
             except Exception as exc:
                 self.breaker.record_failure(profile.model_id)
                 last_error = exc
