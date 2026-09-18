@@ -35,7 +35,7 @@ from hermes.recovery import FailureRecoveryEngine
 from hermes.registry import PersistentModelRegistry, RegistryKind, SqlRegistry
 from hermes.routing import ProjectRouter
 from hermes.security import PromptInjectionDetector
-from hermes.self_improvement import ControlledImprovementEngine, ImprovementProposal
+from hermes.self_improvement import ImprovementProposal, PersistentImprovementEngine
 from hermes.super_control import SuperControlPlane, build_super_router
 from hermes.telemetry import SqlUsageStore, prometheus_payload
 from hermes.world_state import WorldStateBuilder
@@ -241,7 +241,7 @@ class AppContainer:
         self.context = ContextRouter()
         self.scenarios = ScenarioEngine()
         self.hypotheses = HypothesisEngine()
-        self.improvements = ControlledImprovementEngine()
+        self.improvements = PersistentImprovementEngine(self.registry)
         self.evaluation = EvaluationLab()
         self.reviews = ReviewPanel()
         self.recovery = FailureRecoveryEngine()
@@ -502,10 +502,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def recovery(payload: RecoveryRequest) -> dict[str, Any]:
         return container.recovery.decide(payload.error_type, payload.status_code).model_dump()
 
+    @api.get("/v1/improvements/{proposal_id}")
+    def get_improvement(proposal_id: str) -> dict[str, Any]:
+        proposal = container.improvements.get(proposal_id)
+        if proposal is None:
+            raise HTTPException(status_code=404, detail="improvement not found")
+        return proposal.model_dump(mode="json")
+
     @api.post("/v1/improvements/advance")
     def advance_improvement(payload: ImprovementProposal) -> dict[str, Any]:
         try:
             return container.improvements.advance(payload).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @api.post("/v1/improvements/{proposal_id}/reject")
+    def reject_improvement(proposal_id: str) -> dict[str, Any]:
+        try:
+            return container.improvements.reject(proposal_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="improvement not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @api.post("/v1/improvements/{proposal_id}/rollback")
+    def rollback_improvement(proposal_id: str) -> dict[str, Any]:
+        try:
+            return container.improvements.rollback(proposal_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="improvement not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
