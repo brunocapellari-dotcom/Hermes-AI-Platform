@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     service_auth_audience: str | None = None
     service_to_service_auth: bool = False
     model_gateway_url: str | None = None
+    model_gateway_audience: str | None = None
     model_gateway_api_key: SecretStr | None = None
     default_model: str | None = None
     embedding_model: str | None = None
