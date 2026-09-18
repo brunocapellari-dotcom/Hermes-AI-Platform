@@ -304,6 +304,11 @@ resource "google_cloud_run_v2_service" "hermes" {
       }
 
       env {
+        name  = "HERMES_OTLP_ENDPOINT"
+        value = var.otlp_endpoint
+      }
+
+      env {
         name  = "HERMES_ALLOW_EXTERNAL_ACTIONS"
         value = tostring(var.allow_external_actions)
       }
