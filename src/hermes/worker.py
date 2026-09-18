@@ -255,6 +255,14 @@ def _dbos_runtime_config(system_database_url: str) -> DBOSConfig:
         config["system_database_engine"] = cloud_sql_engine(system_database_url)
     else:
         config["system_database_url"] = system_database_url
+    otlp_endpoint = os.getenv("HERMES_OTLP_ENDPOINT", "").strip()
+    if otlp_endpoint:
+        if not otlp_endpoint.startswith(("http://", "https://")):
+            raise ValueError("HERMES_OTLP_ENDPOINT must use HTTP(S)")
+        config["enable_otlp"] = True
+        config["otlp_traces_endpoints"] = [otlp_endpoint]
+        config["otel_attribute_format"] = "semconv"
+        config["otlp_attributes"] = {"service.name": "hermes-worker"}
     return config
 
 
