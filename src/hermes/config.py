@@ -30,8 +30,10 @@ class Settings(BaseSettings):
     second_brain_url: str | None = None
     research_url: str | None = None
     opa_url: str | None = None
+    opa_audience: str | None = None
     opa_policy_path: str = "hermes/allow"
     openfga_url: str | None = None
+    openfga_audience: str | None = None
     openfga_store_id: str | None = None
     openfga_model_id: str | None = None
     external_authorization_required: bool = False
