@@ -103,9 +103,9 @@ class PersistentImprovementEngine:
     def advance(self, submitted: ImprovementProposal) -> ImprovementProposal:
         current = self.get(submitted.proposal_id)
         if current is None:
-            current = self.propose(
-                submitted.model_copy(update={"stage": ImprovementStage.PROPOSED})
-            )
+            if submitted.stage != ImprovementStage.PROPOSED:
+                raise ValueError("unknown improvement must begin at PROPOSED")
+            current = self.propose(submitted)
         if current.target != submitted.target or current.description != submitted.description:
             raise ValueError("improvement target and description are immutable")
         current.tests_passed = current.tests_passed or submitted.tests_passed
