@@ -142,7 +142,7 @@ class ControlPlaneAuthorizationMiddleware:
                 actor=actor,
                 subject=actor,
                 action=operation.action,
-                resource=f"hermes:{scope.get('path', '')}",
+                resource="hermes:control",
                 relation=operation.relation,
                 risk=operation.risk,
                 trust=TrustLevel.TRUSTED,
