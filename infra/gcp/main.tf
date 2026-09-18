@@ -224,6 +224,11 @@ resource "google_cloud_run_v2_service" "hermes" {
       }
 
       env {
+        name  = "HERMES_MODEL_GATEWAY_AUDIENCE"
+        value = var.model_gateway_audience
+      }
+
+      env {
         name  = "HERMES_DEFAULT_MODEL"
         value = var.default_model
       }
