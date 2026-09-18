@@ -170,6 +170,15 @@ def test_ecosystem_contracts_require_idempotency() -> None:
         {
             "base_url": "https://agrolog",
             "capabilities": ["freight_analysis"],
+            "endpoints": [
+                "/health",
+                "/v1/status",
+                "/v1/capabilities",
+                "/v1/query",
+                "/v1/search",
+                "/v1/alerts",
+                "/v1/execute",
+            ],
             "allow_execute": True,
             "idempotency_supported": True,
         },
@@ -181,7 +190,20 @@ def test_ecosystem_contracts_require_idempotency() -> None:
     )
     assert not invalid.valid
     coverage = validator.coverage(
-        {"AGROLOG_MT": {"base_url": "https://x", "capabilities": ["freight_analysis"]}}
+        {
+            "AGROLOG_MT": {
+                "base_url": "https://x",
+                "capabilities": ["freight_analysis"],
+                "endpoints": [
+                    "/health",
+                    "/v1/status",
+                    "/v1/capabilities",
+                    "/v1/query",
+                    "/v1/search",
+                    "/v1/alerts",
+                ],
+            }
+        }
     )
     assert coverage["AGROLOG_MT"]
     assert not coverage["AI_HOLDING"]
