@@ -88,6 +88,26 @@ def test_openai_compatible_gateway_success_and_validation() -> None:
             asyncio.run(gateway.complete(model="m", system="s", user="u"))
 
 
+def test_model_gateway_separates_cloud_run_and_app_auth(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_SERVICE_TO_SERVICE_AUTH", "true")
+    monkeypatch.setattr(
+        "hermes.integrations.serverless_identity_headers",
+        lambda audience: {"X-Serverless-Authorization": f"Bearer iam:{audience}"},
+    )
+    gateway = OpenAICompatibleGateway(
+        "https://gateway.test",
+        api_key="litellm-secret",
+        service_audience="https://gateway.internal",
+    )
+    FakeAsyncClient.responses = [
+        FakeResponse({"choices": [{"message": {"content": "ok"}}]})
+    ]
+    assert asyncio.run(gateway.complete(model="m", system="s", user="u")) == "ok"
+    headers = FakeAsyncClient.calls[0][2]["headers"]
+    assert headers["Authorization"] == "Bearer litellm-secret"
+    assert headers["X-Serverless-Authorization"] == "Bearer iam:https://gateway.internal"
+
+
 def test_holding_client_read_contract_and_write_block() -> None:
     client = HoldingClient("https://holding.test/", timeout=2)
     FakeAsyncClient.responses = [FakeResponse({"status": "ok"})]
