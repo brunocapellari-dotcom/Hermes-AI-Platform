@@ -44,6 +44,7 @@ class AgentPromotionRequest(BaseModel):
     benchmark_passed: bool
     independent_review_passed: bool
     external_action_approved: bool = False
+    replaces_agent_id: str | None = None
 
 
 class SkillPromotionRequest(BaseModel):
@@ -51,6 +52,7 @@ class SkillPromotionRequest(BaseModel):
     tests_passed: bool
     benchmark_passed: bool
     independent_review_passed: bool
+    replaces_skill_id: str | None = None
 
 
 class SuperControlPlane:
@@ -109,7 +111,7 @@ class SuperControlPlane:
 
     def promote_agent(self, payload: AgentPromotionRequest) -> AgentSpec:
         duplicate = self.agents.find_equivalent(payload.spec)
-        if duplicate is not None:
+        if duplicate is not None and duplicate.agent_id != payload.replaces_agent_id:
             raise ValueError(f"equivalent active agent already exists: {duplicate.agent_id}")
         audit = self.agent_auditor.audit(
             payload.spec,
@@ -119,17 +121,38 @@ class SuperControlPlane:
             external_action_approved=payload.external_action_approved,
         )
         promoted = self.agent_auditor.promote(payload.spec, audit)
-        self.agents.save(promoted)
+        if payload.replaces_agent_id:
+            self.agents.replace(payload.replaces_agent_id, promoted)
+        else:
+            self.agents.save(promoted)
         self.audit.record(
             "agent.promoted",
             self._actor(),
-            {"agent_id": promoted.agent_id, "project": promoted.project},
+            {
+                "agent_id": promoted.agent_id,
+                "project": promoted.project,
+                "replaces_agent_id": payload.replaces_agent_id,
+            },
         )
         return promoted
 
+    def disable_agent(self, agent_id: str) -> AgentSpec:
+        agent = self.agents.set_status(agent_id, "disabled")
+        self.audit.record("agent.disabled", self._actor(), {"agent_id": agent_id})
+        return agent
+
+    def rollback_agent(self, current_agent_id: str, restore_agent_id: str) -> AgentSpec:
+        restored = self.agents.rollback(current_agent_id, restore_agent_id)
+        self.audit.record(
+            "agent.rolled_back",
+            self._actor(),
+            {"current_agent_id": current_agent_id, "restore_agent_id": restore_agent_id},
+        )
+        return restored
+
     def promote_skill(self, payload: SkillPromotionRequest) -> SkillSpec:
         duplicate = self.skills.find_equivalent(payload.spec)
-        if duplicate is not None:
+        if duplicate is not None and duplicate.skill_id != payload.replaces_skill_id:
             raise ValueError(f"equivalent active skill already exists: {duplicate.skill_id}")
         audit = self.skill_auditor.audit(
             payload.spec,
@@ -138,13 +161,34 @@ class SuperControlPlane:
             independent_review_passed=payload.independent_review_passed,
         )
         promoted = self.skill_auditor.promote(payload.spec, audit)
-        self.skills.save(promoted, status="active")
+        if payload.replaces_skill_id:
+            self.skills.replace(payload.replaces_skill_id, promoted)
+        else:
+            self.skills.save(promoted, status="active")
         self.audit.record(
             "skill.promoted",
             self._actor(),
-            {"skill_id": promoted.skill_id, "version": promoted.version},
+            {
+                "skill_id": promoted.skill_id,
+                "version": promoted.version,
+                "replaces_skill_id": payload.replaces_skill_id,
+            },
         )
         return promoted
+
+    def disable_skill(self, skill_id: str) -> SkillSpec:
+        skill = self.skills.set_status(skill_id, "disabled")
+        self.audit.record("skill.disabled", self._actor(), {"skill_id": skill_id})
+        return skill
+
+    def rollback_skill(self, current_skill_id: str, restore_skill_id: str) -> SkillSpec:
+        restored = self.skills.rollback(current_skill_id, restore_skill_id)
+        self.audit.record(
+            "skill.rolled_back",
+            self._actor(),
+            {"current_skill_id": current_skill_id, "restore_skill_id": restore_skill_id},
+        )
+        return restored
 
     def register_mcp(self, spec: MCPServerSpec) -> MCPServerSpec:
         self.mcp.register(spec)
@@ -194,6 +238,24 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
         groups = control.agents.duplicate_groups()
         return {"duplicate_groups": groups, "duplicates": sum(len(group) - 1 for group in groups)}
 
+    @router.post("/v1/agents/{agent_id}/disable")
+    def disable_agent(agent_id: str) -> dict[str, Any]:
+        try:
+            return control.disable_agent(agent_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="agent not found") from exc
+
+    @router.post("/v1/agents/{current_agent_id}/rollback/{restore_agent_id}")
+    def rollback_agent(current_agent_id: str, restore_agent_id: str) -> dict[str, Any]:
+        try:
+            return control.rollback_agent(
+                current_agent_id, restore_agent_id
+            ).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="agent not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @router.post("/v1/skills/promote")
     def promote_skill(payload: SkillPromotionRequest) -> dict[str, Any]:
         try:
@@ -209,6 +271,24 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
     def duplicate_skills() -> dict[str, Any]:
         groups = control.skills.duplicate_groups()
         return {"duplicate_groups": groups, "duplicates": sum(len(group) - 1 for group in groups)}
+
+    @router.post("/v1/skills/{skill_id}/disable")
+    def disable_skill(skill_id: str) -> dict[str, Any]:
+        try:
+            return control.disable_skill(skill_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="skill not found") from exc
+
+    @router.post("/v1/skills/{current_skill_id}/rollback/{restore_skill_id}")
+    def rollback_skill(current_skill_id: str, restore_skill_id: str) -> dict[str, Any]:
+        try:
+            return control.rollback_skill(
+                current_skill_id, restore_skill_id
+            ).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="skill not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.post("/v1/security/privacy")
     def privacy(payload: PrivacyInspectRequest) -> dict[str, Any]:
