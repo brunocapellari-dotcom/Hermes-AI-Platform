@@ -213,8 +213,8 @@ class ToolSpec(BaseModel):
     tags: set[str] = Field(default_factory=set)
     permissions: PermissionSet = Field(default_factory=PermissionSet)
     risk: RiskLevel = RiskLevel.LOW
-    timeout_seconds: float = 30.0
-    rate_limit_per_minute: int = 60
+    timeout_seconds: float = Field(default=30.0, gt=0, le=3_600)
+    rate_limit_per_minute: int = Field(default=60, ge=1, le=100_000)
 
 
 class PolicyRequest(BaseModel):
