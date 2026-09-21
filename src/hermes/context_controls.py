@@ -64,13 +64,16 @@ class ToolOutputEnvelope(BaseModel):
 
 
 class ToolOutputLimiter:
-    def __init__(self, *, max_chars: int = 64_000, tail_chars: int = 4_000) -> None:
+    def __init__(
+        self, *, max_chars: int = 64_000, tail_chars: int | None = None
+    ) -> None:
         if max_chars < 256:
             raise ValueError("max_chars must be at least 256")
-        if tail_chars < 0 or tail_chars >= max_chars:
+        resolved_tail = min(4_000, max_chars // 4) if tail_chars is None else tail_chars
+        if resolved_tail < 0 or resolved_tail >= max_chars:
             raise ValueError("tail_chars must be non-negative and smaller than max_chars")
         self.max_chars = max_chars
-        self.tail_chars = tail_chars
+        self.tail_chars = resolved_tail
 
     def limit(self, content: str) -> ToolOutputEnvelope:
         size = len(content)
