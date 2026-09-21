@@ -96,11 +96,12 @@ def migrate_dbos(system_database_url: str, runtime_role: str) -> None:
 
 def main() -> None:
     database_url = _required_env("HERMES_DATABASE_URL")
-    system_database_url = _required_env("HERMES_DBOS_SYSTEM_DATABASE_URL")
+    system_database_url = os.getenv("HERMES_DBOS_SYSTEM_DATABASE_URL", "").strip()
     runtime_role = _required_env("HERMES_RUNTIME_DB_USER")
     try:
         migrate_application(database_url, runtime_role)
-        migrate_dbos(system_database_url, runtime_role)
+        if system_database_url:
+            migrate_dbos(system_database_url, runtime_role)
     finally:
         close_cloud_sql_resources()
 
