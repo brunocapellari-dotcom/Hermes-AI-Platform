@@ -39,6 +39,14 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
         assert routes["endpoint_regression"] == "promptfoo"
         assert routes["rag"] == "ragas"
 
+        mcp_benchmark = client.get("/v1/mcp/benchmark/toolhive")
+        assert mcp_benchmark.status_code == 200
+        assert {item["scenario_id"] for item in mcp_benchmark.json()} >= {
+            "oidc_discovery_ssrf",
+            "container_host_egress",
+            "artifact_signature_provenance",
+        }
+
         mission = client.post("/v1/missions", json={"request": "Como está a Holding?"}).json()
         mission_id = mission["mission_id"]
         dispatch = client.post(f"/v1/missions/{mission_id}/dispatch")
