@@ -209,6 +209,8 @@ class ToolSpec(BaseModel):
     tool_id: str
     owner: str
     project: str | None = None
+    description: str = ""
+    tags: set[str] = Field(default_factory=set)
     permissions: PermissionSet = Field(default_factory=PermissionSet)
     risk: RiskLevel = RiskLevel.LOW
     timeout_seconds: float = 30.0
