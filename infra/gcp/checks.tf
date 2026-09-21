@@ -12,7 +12,7 @@ check "immutable_release_identity" {
 
 check "external_authorization_endpoints" {
   assert {
-    condition = !var.external_authorization_required || (
+    condition = !var.runtime_enabled || !var.external_authorization_required || (
       var.opa_url != "" &&
       var.openfga_url != "" &&
       var.openfga_store_id != ""
