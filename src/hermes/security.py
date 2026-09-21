@@ -23,14 +23,14 @@ class DefaultPolicyEngine:
     def authorize(self, request: PolicyRequest) -> PolicyDecision:
         if request.trust == TrustLevel.UNTRUSTED and request.requests_scope_increase:
             return PolicyDecision(allowed=False, reason="untrusted content cannot expand authority")
+        if request.external_write and not self.allow_external_actions:
+            return PolicyDecision(allowed=False, reason="external writes disabled by policy")
         if request.money or request.production_admin:
             return PolicyDecision(
                 allowed=False,
                 requires_approval=True,
                 reason="owner approval required for critical authority",
             )
-        if request.external_write and not self.allow_external_actions:
-            return PolicyDecision(allowed=False, reason="external writes disabled by policy")
         if request.risk == RiskLevel.CRITICAL:
             return PolicyDecision(
                 allowed=False, requires_approval=True, reason="critical action requires approval"
@@ -89,15 +89,19 @@ class ToolGateway:
     def bound_output(self, content: str) -> ToolOutputEnvelope:
         return self.output_limiter.limit(content)
 
-    def _admit_rate(self, actor: str, spec: ToolSpec) -> None:
+    def _rate_bucket(self, actor: str, spec: ToolSpec) -> deque[float]:
         now = time.monotonic()
-        key = (actor, spec.tool_id)
-        calls = self._calls[key]
+        calls = self._calls[(actor, spec.tool_id)]
         while calls and now - calls[0] >= 60:
             calls.popleft()
-        if len(calls) >= spec.rate_limit_per_minute:
+        return calls
+
+    def _check_rate(self, actor: str, spec: ToolSpec) -> None:
+        if len(self._rate_bucket(actor, spec)) >= spec.rate_limit_per_minute:
             raise PermissionError("tool rate limit exceeded")
-        calls.append(now)
+
+    def _record_rate(self, actor: str, spec: ToolSpec) -> None:
+        self._rate_bucket(actor, spec).append(time.monotonic())
 
     async def execute(
         self,
@@ -125,6 +129,7 @@ class ToolGateway:
         )
         action = f"tool:{tool_id}"
         resource = f"tool:{tool_id}"
+        self._check_rate(actor, spec)
         if decision.requires_approval:
             if self.approvals is None:
                 raise PermissionError(f"owner approval required: {decision.reason}")
@@ -145,7 +150,7 @@ class ToolGateway:
             )
         elif not decision.allowed:
             raise PermissionError(decision.reason)
-        self._admit_rate(actor, spec)
+        self._record_rate(actor, spec)
         try:
             return await asyncio.wait_for(handler(payload), timeout=spec.timeout_seconds)
         except TimeoutError as exc:
