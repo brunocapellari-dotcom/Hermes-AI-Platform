@@ -12,6 +12,10 @@ from sqlalchemy import text
 
 from hermes.ai_core import AIService
 from hermes.auth import authenticated_actor
+from hermes.architecture_policy import (
+    PLATFORM_COMPONENT_DECISIONS,
+    PYDANTIC_HARNESS_DECISIONS,
+)
 from hermes.authorization import build_policy_engine
 from hermes.cloud_sql import close_cloud_sql_resources
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
@@ -21,8 +25,10 @@ from hermes.control_center import ControlCenter
 from hermes.decision import HypothesisEngine, ScenarioEngine, ScenarioOption
 from hermes.domain import AgentSpec, ModelClass, ModelRouteRequest, PolicyRequest, TrustLevel
 from hermes.durable import DBOSMissionDispatcher
+from hermes.durable_benchmark import CANONICAL_SCENARIOS
 from hermes.ecosystem import CANONICAL_PROJECTS, ProjectContractValidator
 from hermes.evaluation import EvalCase, EvaluationLab, ReviewInput, ReviewPanel
+from hermes.evaluation_strategy import EvaluationPurpose, evaluation_route
 from hermes.factories import AgentAuditor, AgentFactory, SkillFactory
 from hermes.hardware import discover_hardware, recommend_local_runtime
 from hermes.integrations import OpenAICompatibleGateway, ResearchClient, SecondBrainClient
@@ -307,6 +313,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "world_state",
                 "control_center",
                 "project_contract_validation",
+                "architecture_decisions",
+                "durable_engine_benchmark",
+                "evaluation_strategy",
+                "tool_search",
+                "tool_output_limits",
                 "embedding",
                 "vision",
                 "speech_to_text",
@@ -318,6 +329,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "durable_dispatch_configured": container.durable is not None,
             "external_authorization_required": settings.external_authorization_required,
         }
+
+    @api.get("/v1/architecture/components")
+    def architecture_components() -> dict[str, Any]:
+        return {
+            "pydantic_harness": [
+                item.model_dump(mode="json") for item in PYDANTIC_HARNESS_DECISIONS
+            ],
+            "platform_components": [
+                item.model_dump(mode="json") for item in PLATFORM_COMPONENT_DECISIONS
+            ],
+        }
+
+    @api.get("/v1/durable/benchmark/scenarios")
+    def durable_benchmark_scenarios() -> list[dict[str, Any]]:
+        return [item.model_dump(mode="json") for item in CANONICAL_SCENARIOS]
+
+    @api.get("/v1/evaluation/strategy")
+    def evaluation_strategy() -> list[dict[str, Any]]:
+        return [
+            evaluation_route(purpose).model_dump(mode="json")
+            for purpose in EvaluationPurpose
+        ]
 
     @api.post("/v1/missions")
     async def create_mission(payload: MissionCreate) -> dict[str, Any]:
