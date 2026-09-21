@@ -18,6 +18,7 @@ from hermes.architecture_policy import (
     PYDANTIC_HARNESS_DECISIONS,
 )
 from hermes.authorization import build_policy_engine
+from hermes.budget import BudgetGuard, BudgetPolicy
 from hermes.cloud_sql import close_cloud_sql_resources
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
 from hermes.config import Settings, get_settings
@@ -167,6 +168,7 @@ class AppContainer:
         self.approvals = SqlApprovalStore(self.registry)
         self.models = PersistentModelRegistry(self.registry)
         self.usage = SqlUsageStore(self.db)
+        self.budget = BudgetGuard(self.usage, self.registry)
         self.world_state = WorldStateBuilder(
             self.registry, self.mission_store, self.audit, self.usage
         )
@@ -238,6 +240,7 @@ class AppContainer:
                 usage=self.usage,
                 privacy=self.privacy,
                 intelligence=self.model_intelligence,
+                budget=self.budget,
             )
             if gateway is not None
             else None
@@ -330,6 +333,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "tool_search",
                 "tool_output_limits",
                 "persistent_tool_approval",
+                "multi_window_spend_limits",
                 "sandbox_coder_contract",
                 "embedding",
                 "vision",
@@ -368,6 +372,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @api.get("/v1/mcp/benchmark/{target}")
     def mcp_benchmark(target: MCPBenchmarkTarget) -> list[dict[str, Any]]:
         return [item.model_dump(mode="json") for item in scenarios_for(target)]
+
+    @api.post("/v1/budgets")
+    def save_budget(payload: BudgetPolicy) -> dict[str, Any]:
+        container.budget.save(payload)
+        actor = authenticated_actor("local-owner") or "local-owner"
+        container.audit.record(
+            "budget.saved",
+            actor,
+            {
+                "project": payload.project,
+                "max_daily_usd": payload.max_daily_usd,
+                "max_weekly_usd": payload.max_weekly_usd,
+                "max_monthly_usd": payload.max_monthly_usd,
+            },
+        )
+        return payload.model_dump(mode="json")
+
+    @api.get("/v1/budgets")
+    def get_budget(project: str | None = None) -> dict[str, Any]:
+        policy = container.budget.policy(project)
+        if policy is None:
+            raise HTTPException(status_code=404, detail="budget policy not found")
+        return policy.model_dump(mode="json")
 
     @api.get("/v1/approvals")
     def list_approvals(status: ApprovalStatus | None = None) -> list[dict[str, Any]]:
