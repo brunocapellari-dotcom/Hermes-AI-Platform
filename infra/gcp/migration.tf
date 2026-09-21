@@ -3,7 +3,6 @@ resource "google_cloud_run_v2_job" "hermes_migration" {
   name                = var.migration_job_name
   location            = var.region
   deletion_protection = true
-  launch_stage        = "BETA"
 
   template {
     template {
@@ -27,7 +26,12 @@ resource "google_cloud_run_v2_job" "hermes_migration" {
 
         env {
           name  = "HERMES_DBOS_SYSTEM_DATABASE_URL"
-          value = "cloudsql+iam:///hermes_workflows"
+          value = var.dbos_reference_enabled ? "cloudsql+iam:///hermes_workflows" : ""
+        }
+
+        env {
+          name  = "HERMES_VERSION"
+          value = var.release_version
         }
 
         env {
