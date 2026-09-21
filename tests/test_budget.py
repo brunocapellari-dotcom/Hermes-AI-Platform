@@ -79,3 +79,30 @@ def test_budget_guard_denies_unknown_external_cost(tmp_path: Path) -> None:
     decision = guard.check("P", unknown)
     assert decision.allowed is False
     assert "unknown" in decision.reason
+
+
+def test_budget_guard_enforces_weekly_and_monthly_windows(tmp_path: Path) -> None:
+    db = Database(f"sqlite:///{tmp_path / 'multi-window.db'}")
+    db.create_schema()
+    usage = SqlUsageStore(db)
+    usage.record(UsageEvent(project="P", operation="generate", cost_usd=2.0))
+    guard = BudgetGuard(usage)
+    guard.save(
+        BudgetPolicy(
+            project="P",
+            max_daily_usd=10,
+            max_weekly_usd=1.5,
+            max_monthly_usd=100,
+        )
+    )
+    decision = guard.check("P", profile("paid"))
+    assert decision.allowed is False
+    assert decision.reason == "weekly AI budget exhausted"
+    assert {window.name for window in decision.windows} == {"daily", "weekly", "monthly"}
+
+
+def test_budget_policy_requires_at_least_one_window() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="at least one spend limit"):
+        BudgetPolicy(project="P")
