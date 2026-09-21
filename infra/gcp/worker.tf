@@ -1,8 +1,7 @@
 resource "google_cloud_run_v2_worker_pool" "hermes_worker" {
-  count               = var.runtime_enabled ? 1 : 0
+  count               = var.runtime_enabled && var.dbos_reference_enabled ? 1 : 0
   name                = var.worker_pool_name
   location            = var.region
-  launch_stage        = "BETA"
   deletion_protection = true
 
   scaling {
@@ -85,6 +84,11 @@ resource "google_cloud_run_v2_worker_pool" "hermes_worker" {
       env {
         name  = "HERMES_DBOS_SYSTEM_DATABASE_URL"
         value = "cloudsql+iam:///hermes_workflows"
+      }
+
+      env {
+        name  = "HERMES_VERSION"
+        value = var.release_version
       }
 
       env {
