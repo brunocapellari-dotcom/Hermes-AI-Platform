@@ -95,6 +95,14 @@ class SqlApprovalStore:
             return None
         return ApprovalRecord.model_validate(item.payload)
 
+    def list(self, status: ApprovalStatus | None = None) -> list[ApprovalRecord]:
+        records: list[ApprovalRecord] = []
+        for item in self.registry.list(RegistryKind.APPROVAL):
+            record = self._expire_if_needed(ApprovalRecord.model_validate(item.payload))
+            if status is None or record.status == status:
+                records.append(record)
+        return sorted(records, key=lambda item: (item.requested_at, item.approval_id))
+
     def _expire_if_needed(self, record: ApprovalRecord) -> ApprovalRecord:
         if record.status in {ApprovalStatus.PENDING, ApprovalStatus.APPROVED}:
             if record.expires_at <= datetime.now(UTC):
