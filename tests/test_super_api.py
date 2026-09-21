@@ -91,6 +91,7 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         )
         assert promoted.status_code == 200
         assert promoted.json()["status"] == "active"
+        agent_id = promoted.json()["agent_id"]
         active = client.get("/v1/agents/active")
         assert [item["name"] for item in active.json()] == ["Research Coordinator"]
 
@@ -112,6 +113,7 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         )
         assert skill.status_code == 200
         assert skill.json()["version"] == "1.0.0"
+        skill_id = skill.json()["skill_id"]
         skills = client.get("/v1/skills/active")
         assert [item["purpose"] for item in skills.json()] == ["normalize research packages"]
 
@@ -155,6 +157,71 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         )
         assert duplicate_skill.status_code == 409
         assert client.get("/v1/skills/duplicates").json()["duplicates"] == 0
+
+        replacement_agent = client.post(
+            "/v1/agents/promote",
+            json={
+                "spec": {
+                    "name": "Research Coordinator v2",
+                    "project": "RESEARCH_AI",
+                    "mission": "coordinate research packages",
+                    "skills": ["research"],
+                    "tools": [],
+                    "permissions": {"read_scopes": ["research:read"]},
+                    "autonomy_level": 1,
+                    "risk": "low",
+                    "status": "sandbox",
+                },
+                "tests_passed": True,
+                "benchmark_passed": True,
+                "independent_review_passed": True,
+                "replaces_agent_id": agent_id,
+            },
+        )
+        assert replacement_agent.status_code == 200
+        replacement_agent_id = replacement_agent.json()["agent_id"]
+        assert [item["name"] for item in client.get("/v1/agents/active").json()] == [
+            "Research Coordinator v2"
+        ]
+        rolled_agent = client.post(
+            f"/v1/agents/{replacement_agent_id}/rollback/{agent_id}"
+        )
+        assert rolled_agent.status_code == 200
+        assert rolled_agent.json()["name"] == "Research Coordinator"
+        assert [item["name"] for item in client.get("/v1/agents/active").json()] == [
+            "Research Coordinator"
+        ]
+
+        replacement_skill = client.post(
+            "/v1/skills/promote",
+            json={
+                "spec": {
+                    "purpose": "normalize research packages",
+                    "inputs": ["research_package"],
+                    "outputs": ["normalized_package"],
+                    "procedure": ["validate", "normalize"],
+                    "validation": ["schema", "provenance"],
+                    "version": "2.0.0",
+                },
+                "tests_passed": True,
+                "benchmark_passed": True,
+                "independent_review_passed": True,
+                "replaces_skill_id": skill_id,
+            },
+        )
+        assert replacement_skill.status_code == 200
+        replacement_skill_id = replacement_skill.json()["skill_id"]
+        assert [item["version"] for item in client.get("/v1/skills/active").json()] == [
+            "2.0.0"
+        ]
+        rolled_skill = client.post(
+            f"/v1/skills/{replacement_skill_id}/rollback/{skill_id}"
+        )
+        assert rolled_skill.status_code == 200
+        assert rolled_skill.json()["version"] == "1.0.0"
+        assert [item["version"] for item in client.get("/v1/skills/active").json()] == [
+            "1.0.0"
+        ]
 
         registered = client.post(
             "/v1/mcp/servers",
