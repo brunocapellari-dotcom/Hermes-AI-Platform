@@ -183,6 +183,7 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         assert [item["name"] for item in client.get("/v1/agents/active").json()] == [
             "Research Coordinator v2"
         ]
+        assert client.get(f"/v1/agents/{agent_id}").json()["registry_status"] == "superseded"
         rolled_agent = client.post(
             f"/v1/agents/{replacement_agent_id}/rollback/{agent_id}"
         )
@@ -191,6 +192,11 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         assert [item["name"] for item in client.get("/v1/agents/active").json()] == [
             "Research Coordinator"
         ]
+        assert (
+            client.get(f"/v1/agents/{replacement_agent_id}").json()["registry_status"]
+            == "rolled_back"
+        )
+        assert client.get(f"/v1/agents/{agent_id}").json()["registry_status"] == "active"
 
         replacement_skill = client.post(
             "/v1/skills/promote",
@@ -214,6 +220,7 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         assert [item["version"] for item in client.get("/v1/skills/active").json()] == [
             "2.0.0"
         ]
+        assert client.get(f"/v1/skills/{skill_id}").json()["registry_status"] == "superseded"
         rolled_skill = client.post(
             f"/v1/skills/{replacement_skill_id}/rollback/{skill_id}"
         )
@@ -222,6 +229,11 @@ def test_super_control_plane_endpoints_and_persistence(tmp_path: Path) -> None:
         assert [item["version"] for item in client.get("/v1/skills/active").json()] == [
             "1.0.0"
         ]
+        assert (
+            client.get(f"/v1/skills/{replacement_skill_id}").json()["registry_status"]
+            == "rolled_back"
+        )
+        assert client.get(f"/v1/skills/{skill_id}").json()["registry_status"] == "active"
 
         registered = client.post(
             "/v1/mcp/servers",
