@@ -238,6 +238,17 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
         groups = control.agents.duplicate_groups()
         return {"duplicate_groups": groups, "duplicates": sum(len(group) - 1 for group in groups)}
 
+    @router.get("/v1/agents/{agent_id}")
+    def get_agent(agent_id: str) -> dict[str, Any]:
+        current = control.agents.get(agent_id)
+        if current is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        agent, registry_status = current
+        return {
+            "spec": agent.model_dump(mode="json"),
+            "registry_status": registry_status,
+        }
+
     @router.post("/v1/agents/{agent_id}/disable")
     def disable_agent(agent_id: str) -> dict[str, Any]:
         try:
@@ -271,6 +282,17 @@ def build_super_router(control: SuperControlPlane) -> APIRouter:
     def duplicate_skills() -> dict[str, Any]:
         groups = control.skills.duplicate_groups()
         return {"duplicate_groups": groups, "duplicates": sum(len(group) - 1 for group in groups)}
+
+    @router.get("/v1/skills/{skill_id}")
+    def get_skill(skill_id: str) -> dict[str, Any]:
+        current = control.skills.get(skill_id)
+        if current is None:
+            raise HTTPException(status_code=404, detail="skill not found")
+        skill, registry_status = current
+        return {
+            "spec": skill.model_dump(mode="json"),
+            "registry_status": registry_status,
+        }
 
     @router.post("/v1/skills/{skill_id}/disable")
     def disable_skill(skill_id: str) -> dict[str, Any]:
