@@ -121,3 +121,55 @@ def test_identical_pending_approval_requests_are_deduplicated(tmp_path: Path) ->
         payload={"x": 1},
     )
     assert first.approval_id == second.approval_id
+
+
+def test_rate_limit_failure_does_not_consume_preapproved_action(tmp_path: Path) -> None:
+    store = approval_store(tmp_path)
+    calls = 0
+
+    async def handler(payload):
+        nonlocal calls
+        calls += 1
+        return {"ok": True}
+
+    gateway = ToolGateway(ApprovalPolicy(), approvals=store)
+    gateway.register(
+        ToolSpec(tool_id="limited-sensitive", owner="test", rate_limit_per_minute=1),
+        handler,
+    )
+
+    first = store.request(
+        actor="service:agent",
+        action="tool:limited-sensitive",
+        resource="tool:limited-sensitive",
+        payload={"n": 1},
+    )
+    store.approve(first.approval_id, approver="owner")
+    asyncio.run(
+        gateway.execute(
+            actor="service:agent",
+            tool_id="limited-sensitive",
+            payload={"n": 1},
+            approval_id=first.approval_id,
+        )
+    )
+    assert calls == 1
+
+    second = store.request(
+        actor="service:agent",
+        action="tool:limited-sensitive",
+        resource="tool:limited-sensitive",
+        payload={"n": 2},
+    )
+    store.approve(second.approval_id, approver="owner")
+
+    with pytest.raises(PermissionError, match="rate limit"):
+        asyncio.run(
+            gateway.execute(
+                actor="service:agent",
+                tool_id="limited-sensitive",
+                payload={"n": 2},
+                approval_id=second.approval_id,
+            )
+        )
+    assert store.get(second.approval_id).status == ApprovalStatus.APPROVED  # type: ignore[union-attr]
