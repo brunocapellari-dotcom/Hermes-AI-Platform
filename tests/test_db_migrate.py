@@ -167,3 +167,34 @@ def test_migration_main_orders_application_then_dbos(monkeypatch: pytest.MonkeyP
         ("dbos", "dbos-url", "runtime"),
         ("close",),
     ]
+
+
+def test_migration_main_skips_dbos_when_reference_engine_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HERMES_DATABASE_URL", "app-url")
+    monkeypatch.delenv("HERMES_DBOS_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.setenv("HERMES_RUNTIME_DB_USER", "runtime")
+    calls: list[tuple[str, str, str] | tuple[str]] = []
+    monkeypatch.setattr(
+        db_migrate,
+        "migrate_application",
+        lambda url, role: calls.append(("app", url, role)),
+    )
+    monkeypatch.setattr(
+        db_migrate,
+        "migrate_dbos",
+        lambda url, role: calls.append(("dbos", url, role)),
+    )
+    monkeypatch.setattr(
+        db_migrate,
+        "close_cloud_sql_resources",
+        lambda: calls.append(("close",)),
+    )
+
+    db_migrate.main()
+
+    assert calls == [
+        ("app", "app-url", "runtime"),
+        ("close",),
+    ]
