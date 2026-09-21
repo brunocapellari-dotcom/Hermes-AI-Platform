@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./hermes.db"
     dbos_system_database_url: str | None = None
     dbos_application_name: str = "hermes-worker"
+    version: str = "0.1.0"
     dbos_queue_name: str = "hermes-missions"
     service_auth_required: bool = False
     service_auth_audience: str | None = None
