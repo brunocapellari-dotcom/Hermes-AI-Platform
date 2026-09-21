@@ -16,6 +16,37 @@ class MCPTransport(StrEnum):
     STDIO = "stdio"
 
 
+class MCPWorkloadPolicy(BaseModel):
+    read_paths: set[str] = Field(default_factory=set)
+    write_paths: set[str] = Field(default_factory=set)
+    network_mode: str = "none"
+    allowed_egress: set[str] = Field(default_factory=set)
+    privileged: bool = False
+    artifact_digest: str | None = None
+    signature_verified: bool = False
+
+    def validate_secure(self) -> None:
+        if self.privileged:
+            raise ValueError("privileged MCP workloads are not allowed")
+        if self.network_mode not in {"none", "bridge"}:
+            raise ValueError("MCP workload network mode must be none or bridge")
+        if self.network_mode == "none" and self.allowed_egress:
+            raise ValueError("egress allowlist requires bridge networking")
+        if "*" in self.allowed_egress:
+            raise ValueError("wildcard MCP egress is not allowed")
+        if self.artifact_digest is not None:
+            prefix = "sha256:"
+            digest = self.artifact_digest
+            if not digest.startswith(prefix) or len(digest) != len(prefix) + 64:
+                raise ValueError("MCP artifact digest must be sha256:<64 hex chars>")
+            try:
+                int(digest[len(prefix) :], 16)
+            except ValueError as exc:
+                raise ValueError("MCP artifact digest must be hexadecimal") from exc
+            if not self.signature_verified:
+                raise ValueError("pinned MCP artifacts require verified signature provenance")
+
+
 class MCPServerSpec(BaseModel):
     server_id: str
     transport: MCPTransport
@@ -25,6 +56,7 @@ class MCPServerSpec(BaseModel):
     trust: TrustLevel = TrustLevel.UNTRUSTED
     risk: RiskLevel = RiskLevel.MEDIUM
     enabled: bool = True
+    workload_policy: MCPWorkloadPolicy | None = None
 
 
 class MCPToolCall(BaseModel):
@@ -81,6 +113,8 @@ class MCPSecurityGateway:
             self._validate_network_endpoint(spec.endpoint)
         elif not spec.endpoint.strip():
             raise ValueError("stdio MCP command cannot be empty")
+        if spec.workload_policy is not None:
+            spec.workload_policy.validate_secure()
         if not spec.allowed_tools:
             raise ValueError("MCP server must have an explicit tool allowlist")
         unknown_hashes = set(spec.schema_hashes).difference(spec.allowed_tools)
