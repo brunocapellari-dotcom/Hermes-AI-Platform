@@ -34,6 +34,10 @@ def test_protected_operation_map_is_specific() -> None:
         "/v1/skills/s1/disable": "can_manage_skills",
         "/v1/skills/s2/rollback/s1": "can_manage_skills",
         "/v1/mcp/servers": "can_manage_tools",
+        "/v1/approvals": "can_approve_actions",
+        "/v1/approvals/a1": "can_approve_actions",
+        "/v1/approvals/a1/approve": "can_approve_actions",
+        "/v1/approvals/a1/reject": "can_approve_actions",
         "/v1/improvements/advance": "can_manage_improvements",
         "/v1/models/performance": "can_record_model_performance",
     }
