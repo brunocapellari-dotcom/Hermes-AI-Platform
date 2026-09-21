@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from hermes.domain import AgentSpec, ModelProfile, SkillSpec
 from hermes.persistence import Database, RegistryRow
@@ -25,6 +25,7 @@ class RegistryKind(StrEnum):
     IMPROVEMENT = "improvement"
     ALERT = "alert"
     BUDGET = "budget"
+    APPROVAL = "approval"
 
 
 class RegistryItem(BaseModel):
@@ -89,6 +90,40 @@ class SqlRegistry:
             row.updated_at = datetime.now(UTC)
             session.commit()
             session.refresh(row)
+            return self._to_item(row)
+
+    def compare_and_set_status(
+        self,
+        kind: RegistryKind,
+        item_id: str,
+        *,
+        expected_status: str,
+        new_status: str,
+        payload: dict[str, Any] | None = None,
+    ) -> RegistryItem:
+        values: dict[str, Any] = {
+            "status": new_status,
+            "updated_at": datetime.now(UTC),
+        }
+        if payload is not None:
+            values["payload"] = json.dumps(payload, ensure_ascii=False, default=str)
+        with self.db.sessions() as session:
+            result = session.execute(
+                update(RegistryRow)
+                .where(
+                    RegistryRow.kind == kind.value,
+                    RegistryRow.item_id == item_id,
+                    RegistryRow.status == expected_status,
+                )
+                .values(**values)
+            )
+            if result.rowcount != 1:
+                session.rollback()
+                raise RuntimeError("registry compare-and-set failed")
+            session.commit()
+            row = session.get(RegistryRow, {"kind": kind.value, "item_id": item_id})
+            if row is None:
+                raise RuntimeError("registry item disappeared after compare-and-set")
             return self._to_item(row)
 
     def list(self, kind: RegistryKind | None = None) -> list[RegistryItem]:
