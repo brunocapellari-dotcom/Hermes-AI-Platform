@@ -292,10 +292,15 @@ def test_dbos_dispatcher_contract(monkeypatch) -> None:
 
     monkeypatch.setattr("hermes.durable.DBOSClient", FakeClient)
     dispatcher = DBOSMissionDispatcher(
-        "postgresql://example", application_name="worker", queue_name="missions"
+        "postgresql://example",
+        application_name="worker",
+        application_version="release-abc1234",
+        queue_name="missions",
     )
     workflow_id = dispatcher.enqueue("abc")
     assert workflow_id == "mission-abc"
     assert dispatcher.client.queues == ["missions"]
     assert dispatcher.client.options["deduplication_id"] == "abc"
+    assert dispatcher.client.options["app_version"] == "release-abc1234"
+    assert dispatcher.client.options["attributes"]["hermes_release"] == "release-abc1234"
     assert dispatcher.client.args == ("abc",)
