@@ -246,6 +246,7 @@ class AppContainer:
             DBOSMissionDispatcher(
                 settings.dbos_system_database_url,
                 application_name=settings.dbos_application_name,
+                application_version=settings.version,
                 queue_name=settings.dbos_queue_name,
             )
             if settings.dbos_system_database_url
