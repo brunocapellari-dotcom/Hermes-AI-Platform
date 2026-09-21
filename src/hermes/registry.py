@@ -126,6 +126,120 @@ class SqlRegistry:
                 raise RuntimeError("registry item disappeared after compare-and-set")
             return self._to_item(row)
 
+    def atomic_replace(
+        self,
+        kind: RegistryKind,
+        *,
+        previous_id: str,
+        replacement_id: str,
+        replacement_payload: dict[str, Any],
+        previous_payload: dict[str, Any] | None = None,
+        active_status: str = "active",
+        previous_new_status: str = "superseded",
+    ) -> RegistryItem:
+        if previous_id == replacement_id:
+            raise ValueError("replacement item must use a new id")
+        with self.db.sessions() as session:
+            previous = session.scalar(
+                select(RegistryRow)
+                .where(
+                    RegistryRow.kind == kind.value,
+                    RegistryRow.item_id == previous_id,
+                )
+                .with_for_update()
+            )
+            if previous is None:
+                raise KeyError(previous_id)
+            if previous.status != active_status:
+                raise ValueError("only an active registry item can be replaced")
+            existing = session.get(
+                RegistryRow,
+                {"kind": kind.value, "item_id": replacement_id},
+            )
+            if existing is not None:
+                raise ValueError("replacement registry id already exists")
+            previous.status = previous_new_status
+            if previous_payload is not None:
+                previous.payload = json.dumps(
+                    previous_payload,
+                    ensure_ascii=False,
+                    default=str,
+                )
+            previous.updated_at = datetime.now(UTC)
+            replacement = RegistryRow(
+                kind=kind.value,
+                item_id=replacement_id,
+                status=active_status,
+                payload=json.dumps(
+                    replacement_payload,
+                    ensure_ascii=False,
+                    default=str,
+                ),
+                updated_at=datetime.now(UTC),
+            )
+            session.add(replacement)
+            session.commit()
+            session.refresh(replacement)
+            return self._to_item(replacement)
+
+    def atomic_status_swap(
+        self,
+        kind: RegistryKind,
+        *,
+        current_id: str,
+        restore_id: str,
+        current_expected_status: str = "active",
+        restore_expected_statuses: set[str],
+        current_new_status: str = "rolled_back",
+        restore_new_status: str = "active",
+        current_payload: dict[str, Any] | None = None,
+        restore_payload: dict[str, Any] | None = None,
+    ) -> tuple[RegistryItem, RegistryItem]:
+        if current_id == restore_id:
+            raise ValueError("current and restore registry ids must differ")
+        with self.db.sessions() as session:
+            locked = session.scalars(
+                select(RegistryRow)
+                .where(
+                    RegistryRow.kind == kind.value,
+                    RegistryRow.item_id.in_([current_id, restore_id]),
+                )
+                .order_by(RegistryRow.item_id)
+                .with_for_update()
+            ).all()
+            by_id = {row.item_id: row for row in locked}
+            current = by_id.get(current_id)
+            restore = by_id.get(restore_id)
+            if current is None:
+                raise KeyError(current_id)
+            if restore is None:
+                raise KeyError(restore_id)
+            if current.status != current_expected_status:
+                raise ValueError("current registry item is not active")
+            if restore.status not in restore_expected_statuses:
+                raise ValueError("restore registry item is not eligible")
+            current.status = current_new_status
+            restore.status = restore_new_status
+            if current_payload is not None:
+                current.payload = json.dumps(
+                    current_payload,
+                    ensure_ascii=False,
+                    default=str,
+                )
+            if restore_payload is not None:
+                restore.payload = json.dumps(
+                    restore_payload,
+                    ensure_ascii=False,
+                    default=str,
+                )
+            now = datetime.now(UTC)
+            current.updated_at = now
+            restore.updated_at = now
+            session.commit()
+            session.refresh(current)
+            session.refresh(restore)
+            return self._to_item(current), self._to_item(restore)
+
     def list(self, kind: RegistryKind | None = None) -> list[RegistryItem]:
         with self.db.sessions() as session:
             statement = select(RegistryRow)
@@ -270,14 +384,14 @@ class PersistentAgentRegistry:
         previous, previous_status = current
         if previous_status != "active" or previous.status != "active":
             raise ValueError("only an active agent can be replaced")
-        if replacement.agent_id == previous_agent_id:
-            raise ValueError("replacement agent must use a new agent_id")
-        self.save(replacement)
-        try:
-            self.set_status(previous_agent_id, "superseded")
-        except Exception:
-            self.set_status(replacement.agent_id, "disabled")
-            raise
+        superseded = previous.model_copy(update={"status": "superseded"})
+        self.registry.atomic_replace(
+            RegistryKind.AGENT,
+            previous_id=previous_agent_id,
+            replacement_id=replacement.agent_id,
+            replacement_payload=replacement.model_dump(mode="json"),
+            previous_payload=superseded.model_dump(mode="json"),
+        )
         return replacement
 
     def rollback(self, current_agent_id: str, restore_agent_id: str) -> AgentSpec:
@@ -295,12 +409,17 @@ class PersistentAgentRegistry:
             raise ValueError("rollback target must be superseded or disabled")
         if current_agent.project != restore_agent.project:
             raise ValueError("rollback agents must belong to the same project")
-        self.set_status(current_agent_id, "rolled_back")
-        try:
-            return self.set_status(restore_agent_id, "active")
-        except Exception:
-            self.set_status(current_agent_id, "active")
-            raise
+        rolled_back = current_agent.model_copy(update={"status": "rolled_back"})
+        restored = restore_agent.model_copy(update={"status": "active"})
+        self.registry.atomic_status_swap(
+            RegistryKind.AGENT,
+            current_id=current_agent_id,
+            restore_id=restore_agent_id,
+            restore_expected_statuses={"superseded", "disabled"},
+            current_payload=rolled_back.model_dump(mode="json"),
+            restore_payload=restored.model_dump(mode="json"),
+        )
+        return restored
 
 
 class PersistentSkillRegistry:
@@ -361,14 +480,12 @@ class PersistentSkillRegistry:
         _previous, previous_status = current
         if previous_status != "active":
             raise ValueError("only an active skill can be replaced")
-        if replacement.skill_id == previous_skill_id:
-            raise ValueError("replacement skill must use a new skill_id")
-        self.save(replacement, status="active")
-        try:
-            self.set_status(previous_skill_id, "superseded")
-        except Exception:
-            self.set_status(replacement.skill_id, "disabled")
-            raise
+        self.registry.atomic_replace(
+            RegistryKind.SKILL,
+            previous_id=previous_skill_id,
+            replacement_id=replacement.skill_id,
+            replacement_payload=replacement.model_dump(mode="json"),
+        )
         return replacement
 
     def rollback(self, current_skill_id: str, restore_skill_id: str) -> SkillSpec:
@@ -384,9 +501,10 @@ class PersistentSkillRegistry:
             raise ValueError("rollback current skill must be active")
         if restore_status not in {"superseded", "disabled"}:
             raise ValueError("rollback target must be superseded or disabled")
-        self.set_status(current_skill_id, "rolled_back")
-        try:
-            return self.set_status(restore_skill_id, "active")
-        except Exception:
-            self.set_status(current_skill_id, "active")
-            raise
+        self.registry.atomic_status_swap(
+            RegistryKind.SKILL,
+            current_id=current_skill_id,
+            restore_id=restore_skill_id,
+            restore_expected_statuses={"superseded", "disabled"},
+        )
+        return restore_skill
