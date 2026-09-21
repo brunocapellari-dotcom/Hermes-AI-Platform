@@ -4,6 +4,7 @@ import hashlib
 import ipaddress
 import json
 from enum import StrEnum
+from typing import Protocol
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
@@ -23,7 +24,7 @@ class MCPWorkloadPolicy(BaseModel):
     allowed_egress: set[str] = Field(default_factory=set)
     privileged: bool = False
     artifact_digest: str | None = None
-    signature_verified: bool = False
+    signature_reference: str | None = None
 
     def validate_secure(self) -> None:
         if self.privileged:
@@ -43,8 +44,12 @@ class MCPWorkloadPolicy(BaseModel):
                 int(digest[len(prefix) :], 16)
             except ValueError as exc:
                 raise ValueError("MCP artifact digest must be hexadecimal") from exc
-            if not self.signature_verified:
-                raise ValueError("pinned MCP artifacts require verified signature provenance")
+            if not self.signature_reference:
+                raise ValueError("pinned MCP artifacts require a signature reference")
+
+
+class ArtifactVerifier(Protocol):
+    def verify(self, *, digest: str, signature_reference: str) -> bool: ...
 
 
 class MCPServerSpec(BaseModel):
@@ -79,8 +84,9 @@ def fingerprint_schema(schema: dict[str, object]) -> str:
 
 
 class MCPSecurityGateway:
-    def __init__(self) -> None:
+    def __init__(self, artifact_verifier: ArtifactVerifier | None = None) -> None:
         self._servers: dict[str, MCPServerSpec] = {}
+        self.artifact_verifier = artifact_verifier
 
     @staticmethod
     def _validate_network_endpoint(endpoint: str) -> None:
@@ -115,6 +121,15 @@ class MCPSecurityGateway:
             raise ValueError("stdio MCP command cannot be empty")
         if spec.workload_policy is not None:
             spec.workload_policy.validate_secure()
+            if spec.workload_policy.artifact_digest is not None:
+                if self.artifact_verifier is None:
+                    raise ValueError("MCP artifact provenance verifier is required")
+                signature_reference = spec.workload_policy.signature_reference
+                if signature_reference is None or not self.artifact_verifier.verify(
+                    digest=spec.workload_policy.artifact_digest,
+                    signature_reference=signature_reference,
+                ):
+                    raise ValueError("MCP artifact provenance verification failed")
         if not spec.allowed_tools:
             raise ValueError("MCP server must have an explicit tool allowlist")
         unknown_hashes = set(spec.schema_hashes).difference(spec.allowed_tools)
