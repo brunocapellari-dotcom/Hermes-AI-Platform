@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from typing import Protocol
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from uuid import uuid4
@@ -49,6 +50,27 @@ def payload_sha256(payload: Mapping[str, object]) -> str:
         default=str,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+class ApprovalStore(Protocol):
+    def request(
+        self,
+        *,
+        actor: str,
+        action: str,
+        resource: str,
+        payload: Mapping[str, object],
+    ) -> ApprovalRecord: ...
+
+    def consume(
+        self,
+        approval_id: str,
+        *,
+        actor: str,
+        action: str,
+        resource: str,
+        payload: Mapping[str, object],
+    ) -> ApprovalRecord: ...
 
 
 class SqlApprovalStore:
