@@ -16,9 +16,11 @@ class DBOSMissionDispatcher:
         system_database_url: str,
         *,
         application_name: str = "hermes-worker",
+        application_version: str = "0.1.0",
         queue_name: str = "hermes-missions",
     ) -> None:
         self.queue_name = queue_name
+        self.application_version = application_version
         system_database_engine: Engine | None = None
         dbos_url: str | None = system_database_url
         if is_cloud_sql_iam_url(system_database_url):
@@ -38,7 +40,11 @@ class DBOSMissionDispatcher:
             "workflow_id": f"mission-{mission_id}",
             "deduplication_id": mission_id,
             "duplication_policy": "return-existing",
-            "attributes": {"hermes_mission_id": mission_id},
+            "app_version": self.application_version,
+            "attributes": {
+                "hermes_mission_id": mission_id,
+                "hermes_release": self.application_version,
+            },
         }
         handle: Any = self.client.enqueue(options, mission_id)
         return str(handle.workflow_id)
