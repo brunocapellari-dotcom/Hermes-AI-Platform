@@ -4,6 +4,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol
 
+from hermes.context_controls import ToolOutputEnvelope, ToolOutputLimiter, ToolSearchIndex, ToolSearchMatch
 from hermes.domain import PolicyDecision, PolicyRequest, RiskLevel, ToolSpec, TrustLevel
 
 
@@ -56,14 +57,30 @@ ToolHandler = Callable[[Mapping[str, Any]], Awaitable[Mapping[str, Any]]]
 
 
 class ToolGateway:
-    def __init__(self, policy: PolicyEngine) -> None:
+    def __init__(
+        self,
+        policy: PolicyEngine,
+        *,
+        output_limiter: ToolOutputLimiter | None = None,
+    ) -> None:
         self.policy = policy
+        self.output_limiter = output_limiter or ToolOutputLimiter()
         self._tools: dict[str, tuple[ToolSpec, ToolHandler]] = {}
 
     def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
         if spec.tool_id in self._tools:
             raise ValueError(f"duplicate tool_id: {spec.tool_id}")
         self._tools[spec.tool_id] = (spec, handler)
+
+    def search(self, query: str, *, limit: int = 8) -> list[ToolSearchMatch]:
+        return ToolSearchIndex().search(
+            [spec for spec, _handler in self._tools.values()],
+            query,
+            limit=limit,
+        )
+
+    def bound_output(self, content: str) -> ToolOutputEnvelope:
+        return self.output_limiter.limit(content)
 
     async def execute(
         self,
