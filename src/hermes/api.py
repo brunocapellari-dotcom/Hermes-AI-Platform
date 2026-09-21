@@ -33,6 +33,7 @@ from hermes.factories import AgentAuditor, AgentFactory, SkillFactory
 from hermes.hardware import discover_hardware, recommend_local_runtime
 from hermes.integrations import OpenAICompatibleGateway, ResearchClient, SecondBrainClient
 from hermes.model_intelligence import AdaptiveModelRouter, PersistentModelIntelligence
+from hermes.mcp_benchmark import MCPBenchmarkTarget, scenarios_for
 from hermes.multimodal import OpenAICompatibleMultimodal
 from hermes.orchestrator import HermesOrchestrator
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
@@ -351,6 +352,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             evaluation_route(purpose).model_dump(mode="json")
             for purpose in EvaluationPurpose
         ]
+
+    @api.get("/v1/mcp/benchmark/{target}")
+    def mcp_benchmark(target: MCPBenchmarkTarget) -> list[dict[str, Any]]:
+        return [item.model_dump(mode="json") for item in scenarios_for(target)]
 
     @api.post("/v1/missions")
     async def create_mission(payload: MissionCreate) -> dict[str, Any]:
