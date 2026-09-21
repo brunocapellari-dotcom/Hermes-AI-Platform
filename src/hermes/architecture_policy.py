@@ -236,3 +236,77 @@ def validate_component_matrix(
             )
         if not decision.canonical_owner.startswith(("HERMES_", "SECOND_BRAIN", "RESEARCH_AI")):
             raise ValueError(f"non-canonical owner: {decision.canonical_owner}")
+
+
+PLATFORM_COMPONENT_DECISIONS: tuple[ComponentDecision, ...] = (
+    ComponentDecision(
+        component="DBOS",
+        responsibility="durable execution",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_DURABLE_ENGINE",
+        rationale="current reference implementation; must compete under the same crash/idempotency/versioning benchmark",
+    ),
+    ComponentDecision(
+        component="Temporal",
+        responsibility="durable execution",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_DURABLE_ENGINE",
+        rationale="strong replay/versioning ecosystem; additional control-plane cost must be measured",
+    ),
+    ComponentDecision(
+        component="Restate",
+        responsibility="durable execution",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_DURABLE_ENGINE",
+        rationale="durable services/workflows and Pydantic AI integration merit an equal benchmark",
+    ),
+    ComponentDecision(
+        component="ToolHive",
+        responsibility="MCP runtime/registry/gateway",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_MCP_GATEWAY",
+        rationale="evaluate isolation, signed artifacts, registry and virtual MCP patterns without duplicating Hermes control plane",
+        constraints=["security advisory regression suite", "deny-by-default egress", "no parallel canonical gateway"],
+    ),
+    ComponentDecision(
+        component="IBM ContextForge",
+        responsibility="MCP federation/A2A/plugin gateway",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_MCP_GATEWAY",
+        rationale="benchmark federation, A2A and plugin hooks as complementary patterns only",
+        constraints=["no second canonical registry", "no second policy authority"],
+    ),
+    ComponentDecision(
+        component="Arize Phoenix",
+        responsibility="AI observability UI and trace analysis",
+        decision=AdoptionDecision.ADOPT,
+        canonical_owner="HERMES_OTEL",
+        rationale="preferred optional OpenTelemetry analysis backend; OTel and Hermes ledger remain canonical",
+    ),
+    ComponentDecision(
+        component="Promptfoo",
+        responsibility="LLM regression and red-team",
+        decision=AdoptionDecision.ADOPT,
+        canonical_owner="HERMES_EVALUATION",
+        rationale="primary declarative regression and adversarial suite once live endpoints exist",
+    ),
+    ComponentDecision(
+        component="DeepEval",
+        responsibility="Python-native LLM component tests",
+        decision=AdoptionDecision.RESERVE,
+        canonical_owner="HERMES_EVALUATION",
+        rationale="use only for Python-specific assertions/metrics that Promptfoo and deterministic tests do not cover",
+    ),
+    ComponentDecision(
+        component="Ragas",
+        responsibility="RAG retrieval/generation evaluation",
+        decision=AdoptionDecision.ADOPT,
+        canonical_owner="HERMES_EVALUATION",
+        rationale="specialized RAG evaluation for Second Brain/retrieval pipelines, not general agent regression",
+    ),
+)
+
+
+def validate_all_component_matrices() -> None:
+    validate_component_matrix(PYDANTIC_HARNESS_DECISIONS)
+    validate_component_matrix(PLATFORM_COMPONENT_DECISIONS)
