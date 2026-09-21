@@ -71,6 +71,26 @@ class SqlRegistry:
             row = session.get(RegistryRow, {"kind": kind.value, "item_id": item_id})
             return self._to_item(row) if row else None
 
+    def set_status(
+        self,
+        kind: RegistryKind,
+        item_id: str,
+        status: str,
+        *,
+        payload: dict[str, Any] | None = None,
+    ) -> RegistryItem:
+        with self.db.sessions() as session:
+            row = session.get(RegistryRow, {"kind": kind.value, "item_id": item_id})
+            if row is None:
+                raise KeyError(item_id)
+            row.status = status
+            if payload is not None:
+                row.payload = json.dumps(payload, ensure_ascii=False, default=str)
+            row.updated_at = datetime.now(UTC)
+            session.commit()
+            session.refresh(row)
+            return self._to_item(row)
+
     def list(self, kind: RegistryKind | None = None) -> list[RegistryItem]:
         with self.db.sessions() as session:
             statement = select(RegistryRow)
@@ -188,6 +208,65 @@ class PersistentAgentRegistry:
             groups.setdefault(_agent_fingerprint(agent), []).append(agent.agent_id)
         return [sorted(ids) for ids in groups.values() if len(ids) > 1]
 
+    def get(self, agent_id: str) -> tuple[AgentSpec, str] | None:
+        item = self.registry.get(RegistryKind.AGENT, agent_id)
+        if item is None:
+            return None
+        return AgentSpec.model_validate(item.payload), item.status
+
+    def set_status(self, agent_id: str, status: str) -> AgentSpec:
+        current = self.get(agent_id)
+        if current is None:
+            raise KeyError(agent_id)
+        agent, _old_status = current
+        agent.status = status
+        self.registry.set_status(
+            RegistryKind.AGENT,
+            agent_id,
+            status,
+            payload=agent.model_dump(mode="json"),
+        )
+        return agent
+
+    def replace(self, previous_agent_id: str, replacement: AgentSpec) -> AgentSpec:
+        current = self.get(previous_agent_id)
+        if current is None:
+            raise KeyError(previous_agent_id)
+        previous, previous_status = current
+        if previous_status != "active" or previous.status != "active":
+            raise ValueError("only an active agent can be replaced")
+        if replacement.agent_id == previous_agent_id:
+            raise ValueError("replacement agent must use a new agent_id")
+        self.save(replacement)
+        try:
+            self.set_status(previous_agent_id, "superseded")
+        except Exception:
+            self.set_status(replacement.agent_id, "disabled")
+            raise
+        return replacement
+
+    def rollback(self, current_agent_id: str, restore_agent_id: str) -> AgentSpec:
+        current = self.get(current_agent_id)
+        restore = self.get(restore_agent_id)
+        if current is None:
+            raise KeyError(current_agent_id)
+        if restore is None:
+            raise KeyError(restore_agent_id)
+        current_agent, current_status = current
+        restore_agent, restore_status = restore
+        if current_status != "active" or current_agent.status != "active":
+            raise ValueError("rollback current agent must be active")
+        if restore_status not in {"superseded", "disabled"}:
+            raise ValueError("rollback target must be superseded or disabled")
+        if current_agent.project != restore_agent.project:
+            raise ValueError("rollback agents must belong to the same project")
+        self.set_status(current_agent_id, "rolled_back")
+        try:
+            return self.set_status(restore_agent_id, "active")
+        except Exception:
+            self.set_status(current_agent_id, "active")
+            raise
+
 
 class PersistentSkillRegistry:
     def __init__(self, registry: SqlRegistry) -> None:
@@ -225,3 +304,54 @@ class PersistentSkillRegistry:
         for skill in self.load():
             groups.setdefault(_skill_fingerprint(skill), []).append(skill.skill_id)
         return [sorted(ids) for ids in groups.values() if len(ids) > 1]
+
+    def get(self, skill_id: str) -> tuple[SkillSpec, str] | None:
+        item = self.registry.get(RegistryKind.SKILL, skill_id)
+        if item is None:
+            return None
+        return SkillSpec.model_validate(item.payload), item.status
+
+    def set_status(self, skill_id: str, status: str) -> SkillSpec:
+        current = self.get(skill_id)
+        if current is None:
+            raise KeyError(skill_id)
+        skill, _old_status = current
+        self.registry.set_status(RegistryKind.SKILL, skill_id, status)
+        return skill
+
+    def replace(self, previous_skill_id: str, replacement: SkillSpec) -> SkillSpec:
+        current = self.get(previous_skill_id)
+        if current is None:
+            raise KeyError(previous_skill_id)
+        _previous, previous_status = current
+        if previous_status != "active":
+            raise ValueError("only an active skill can be replaced")
+        if replacement.skill_id == previous_skill_id:
+            raise ValueError("replacement skill must use a new skill_id")
+        self.save(replacement, status="active")
+        try:
+            self.set_status(previous_skill_id, "superseded")
+        except Exception:
+            self.set_status(replacement.skill_id, "disabled")
+            raise
+        return replacement
+
+    def rollback(self, current_skill_id: str, restore_skill_id: str) -> SkillSpec:
+        current = self.get(current_skill_id)
+        restore = self.get(restore_skill_id)
+        if current is None:
+            raise KeyError(current_skill_id)
+        if restore is None:
+            raise KeyError(restore_skill_id)
+        _current_skill, current_status = current
+        restore_skill, restore_status = restore
+        if current_status != "active":
+            raise ValueError("rollback current skill must be active")
+        if restore_status not in {"superseded", "disabled"}:
+            raise ValueError("rollback target must be superseded or disabled")
+        self.set_status(current_skill_id, "rolled_back")
+        try:
+            return self.set_status(restore_skill_id, "active")
+        except Exception:
+            self.set_status(current_skill_id, "active")
+            raise
