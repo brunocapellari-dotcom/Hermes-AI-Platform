@@ -11,6 +11,7 @@ type hermes
     define can_manage_agents: [user]
     define can_manage_skills: [user]
     define can_manage_tools: [user]
+    define can_approve_actions: [user]
     define can_manage_improvements: [user]
     define can_record_model_performance: [user]
 
