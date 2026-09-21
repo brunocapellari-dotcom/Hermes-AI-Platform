@@ -51,7 +51,6 @@ from hermes.world_state import WorldStateBuilder
 
 class MissionCreate(BaseModel):
     request: str = Field(min_length=1, max_length=20_000)
-    actor: str = "owner"
 
 
 class InjectionInspect(BaseModel):
@@ -361,7 +360,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.post("/v1/missions")
     async def create_mission(payload: MissionCreate) -> dict[str, Any]:
-        mission = await container.orchestrator.create_mission(payload.request, actor=payload.actor)
+        actor = authenticated_actor("local-owner") or "local-owner"
+        mission = await container.orchestrator.create_mission(payload.request, actor=actor)
         return mission.model_dump(mode="json")
 
     @api.get("/v1/missions/{mission_id}")
@@ -480,7 +480,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.post("/v1/security/authorize")
     def authorize(payload: PolicyRequest) -> dict[str, Any]:
-        return container.policy.authorize(payload).model_dump()
+        actor = authenticated_actor("local-owner") or "local-owner"
+        request = payload.model_copy(update={"actor": actor, "subject": actor})
+        return container.policy.authorize(request).model_dump()
 
     @api.post("/v1/models/route")
     def route_model(payload: ModelRouteRequest) -> dict[str, Any]:
