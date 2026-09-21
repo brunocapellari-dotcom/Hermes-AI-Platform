@@ -2,8 +2,10 @@ import pytest
 
 from hermes.architecture_policy import (
     AdoptionDecision,
+    PLATFORM_COMPONENT_DECISIONS,
     PYDANTIC_HARNESS_DECISIONS,
     decision_for,
+    validate_all_component_matrices,
     validate_component_matrix,
 )
 from hermes.durable_benchmark import (
@@ -103,3 +105,19 @@ def test_unknown_durable_scenario_is_rejected() -> None:
     )
     with pytest.raises(ValueError, match="unknown benchmark"):
         eligible_engines([report])
+
+
+def test_platform_component_policy_prevents_duplicate_framework_ownership() -> None:
+    validate_all_component_matrices()
+    by_name = {item.component: item for item in PLATFORM_COMPONENT_DECISIONS}
+    assert {
+        by_name["DBOS"].decision,
+        by_name["Temporal"].decision,
+        by_name["Restate"].decision,
+    } == {AdoptionDecision.BENCHMARK}
+    assert by_name["ToolHive"].canonical_owner == "HERMES_MCP_GATEWAY"
+    assert by_name["IBM ContextForge"].canonical_owner == "HERMES_MCP_GATEWAY"
+    assert by_name["Arize Phoenix"].canonical_owner == "HERMES_OTEL"
+    assert by_name["Promptfoo"].decision == AdoptionDecision.ADOPT
+    assert by_name["DeepEval"].decision == AdoptionDecision.RESERVE
+    assert by_name["Ragas"].decision == AdoptionDecision.ADOPT
