@@ -87,3 +87,29 @@ def test_tool_gateway_search_and_output_bounds() -> None:
     bounded = gateway.bound_output("x" * 70_000)
     assert bounded.truncated
     assert bounded.original_chars == 70_000
+
+
+def test_tool_gateway_blocks_allowed_but_pending_approval() -> None:
+    class ApprovalPolicy:
+        def authorize(self, request):
+            from hermes.domain import PolicyDecision
+
+            return PolicyDecision(
+                allowed=True,
+                requires_approval=True,
+                reason="manual approval",
+            )
+
+    called = False
+
+    async def handler(payload):
+        nonlocal called
+        called = True
+        return payload
+
+    gateway = ToolGateway(ApprovalPolicy())
+    gateway.register(ToolSpec(tool_id="sensitive", owner="test"), handler)
+
+    with pytest.raises(PermissionError, match="owner approval required"):
+        asyncio.run(gateway.execute(actor="owner", tool_id="sensitive", payload={}))
+    assert called is False
