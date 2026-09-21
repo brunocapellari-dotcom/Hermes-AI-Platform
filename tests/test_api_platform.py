@@ -79,6 +79,39 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
         )
         assert [item["source"] for item in context.json()["items"]] == ["a"]
 
+        compacted = client.post(
+            "/v1/context/compact",
+            json={
+                "target_project": "AGROLOG_MT",
+                "max_chars": 512,
+                "pinned_sources": ["policy"],
+                "items": [
+                    {
+                        "source": "policy",
+                        "project": "X",
+                        "data_class": "public",
+                        "content": "P" * 200,
+                    },
+                    {
+                        "source": "large",
+                        "project": "X",
+                        "data_class": "public",
+                        "content": "L" * 600,
+                    },
+                    {
+                        "source": "health",
+                        "project": "P",
+                        "data_class": "health",
+                        "content": "must not enter context",
+                    },
+                ],
+            },
+        )
+        assert compacted.status_code == 200
+        assert [item["source"] for item in compacted.json()["items"]] == ["policy", "large"]
+        assert compacted.json()["truncated_sources"] == ["large"]
+        assert all(item["source"] != "health" for item in compacted.json()["items"])
+
         scenarios = client.post(
             "/v1/scenarios/compare",
             json={
