@@ -34,12 +34,40 @@ Primary candidate: LiteLLM behind the Hermes `ModelGateway` contract. Bifrost an
 
 ## Durable work
 
-Hermes `MissionStore` remains canonical. DBOS is the primary durable-execution candidate because it adds Postgres-backed workflows, queues, deduplication and recovery without another orchestration server. Hermes dispatches with mission ID as idempotency/deduplication identity. Temporal remains a reserve option if scale, multi-language orchestration or benchmark evidence justifies the additional control plane.
+Hermes MissionStore remains canonical at the mission layer. No durable engine is permanently selected yet.
+
+DBOS, Temporal and Restate are equal benchmark candidates behind a Hermes-owned durable boundary. The existing DBOS worker/dispatcher is the current reference implementation only because it was implemented first; it is not an architecture lock.
+
+All candidates must pass the same crash/resume, no-duplicate-side-effect, parallel DAG, signal/wait, version-upgrade, queue/backpressure, long-idle, OpenTelemetry, local reproducibility and operator-recovery scenarios defined in src/hermes/durable_benchmark.py. Only one engine becomes canonical after measured evidence.
 
 ## Observability
 
-OpenTelemetry is canonical for distributed telemetry. Hermes will follow GenAI semantic conventions where stable, but wraps them because the conventions are still marked Development. PostgreSQL usage events are the initial auditable FinOps ledger; Prometheus exposes service metrics; BigQuery is the analytical destination in GCP.
+OpenTelemetry is canonical for distributed telemetry. Hermes will follow GenAI semantic conventions where stable, but wraps them to avoid schema lock-in. PostgreSQL usage/audit events remain canonical operational evidence; Prometheus exposes service metrics; BigQuery is the analytical destination in GCP.
 
-## Agent frameworks
+Arize Phoenix is the preferred optional AI-observability backend/UI over OpenTelemetry. Phoenix may provide trace exploration, datasets and evaluation workflows, but it never becomes mission state, policy authority, FinOps source of truth or a required runtime dependency.
 
-LangGraph and PydanticAI are components, not architecture. Introduce only where benchmarked value exceeds the maintenance cost. This avoids framework lock-in and duplicate state/memory.
+## Agent frameworks and capability libraries
+
+Hermes is the platform. LangGraph, Pydantic AI and Pydantic AI Harness are components/reference implementations.
+
+Pydantic AI Harness is audited capability-by-capability. Hermes may adopt patterns such as scoped FileSystem, bounded Shell, RepoContext, Planning, SubAgents, Tool Search, Compaction, Tool Output Limits, Guardrails, Spend Limits, Tool Approval and OpenTelemetry. It does not delegate canonical memory, durable state, policy, registry or authority to the Harness.
+
+Coder and Researcher are decomposed rather than imported wholesale for production. In particular, production command execution must remain sandboxed and policy-bound.
+
+The canonical capability decisions live in src/hermes/architecture_policy.py and the detailed review in docs/PYDANTIC_AI_HARNESS_AUDIT.md.
+
+## MCP runtime and federation
+
+Hermes MCP Gateway remains the single canonical MCP admission/control boundary.
+
+ToolHive is benchmarked for secure runtime isolation, permission profiles, signed artifact provenance, registry and Virtual MCP capabilities. Hermes already adopted the portable permission/provenance concept in MCPWorkloadPolicy without adopting ToolHive as the control plane.
+
+IBM ContextForge is benchmarked for federation, A2A and plugin-hook semantics. Its registry/RBAC/policy functions must not duplicate Hermes Registry + OPA + OpenFGA unless a measured missing requirement justifies a narrow adapter.
+
+## Evaluation architecture
+
+Hermes deterministic tests remain mandatory.
+
+Promptfoo owns endpoint regression and red-team testing. Ragas owns RAG-specific retrieval/context/faithfulness evaluation. DeepEval is optional for Python-specific LLM assertions that are not already covered. Trajectory Judge remains a benchmark capability for long missions.
+
+The routing is executable in src/hermes/evaluation_strategy.py so multiple frameworks do not silently test the same responsibility.
