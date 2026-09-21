@@ -77,6 +77,13 @@ PROTECTED_OPERATIONS: tuple[ProtectedOperation, ...] = (
         RiskLevel.HIGH,
     ),
     ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/budgets$"),
+        "budget:manage",
+        "can_manage_budgets",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
         "GET",
         re.compile(r"^/v1/approvals(?:/[^/]+)?$"),
         "approval:read",
