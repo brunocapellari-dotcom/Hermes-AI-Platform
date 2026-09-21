@@ -126,6 +126,7 @@ resource "google_sql_database" "hermes" {
 }
 
 resource "google_sql_database" "hermes_workflows" {
+  count    = var.dbos_reference_enabled ? 1 : 0
   name     = "hermes_workflows"
   instance = google_sql_database_instance.hermes.name
 }
