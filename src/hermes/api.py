@@ -21,7 +21,7 @@ from hermes.authorization import build_policy_engine
 from hermes.cloud_sql import close_cloud_sql_resources
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
 from hermes.config import Settings, get_settings
-from hermes.context import ContextItem, ContextRouter
+from hermes.context import ContextCompactor, ContextItem, ContextRouter
 from hermes.contracts import DurableDispatcher
 from hermes.control_center import ControlCenter
 from hermes.decision import HypothesisEngine, ScenarioEngine, ScenarioOption
@@ -96,6 +96,11 @@ class ContextSelect(BaseModel):
     items: list[ContextItem]
     target_project: str
     tenant: str = "owner"
+
+
+class ContextCompact(ContextSelect):
+    max_chars: int = Field(default=32_000, ge=512, le=1_000_000)
+    pinned_sources: set[str] = Field(default_factory=set)
 
 
 class GenerateRequest(BaseModel):
@@ -254,6 +259,7 @@ class AppContainer:
             else None
         )
         self.context = ContextRouter()
+        self.compactor = ContextCompactor()
         self.scenarios = ScenarioEngine()
         self.hypotheses = HypothesisEngine()
         self.improvements = PersistentImprovementEngine(self.registry)
@@ -301,6 +307,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "adaptive_model_routing",
                 "model_performance_learning",
                 "context_routing",
+                "context_compaction",
                 "privacy_guard",
                 "mcp_admission",
                 "deliberation",
@@ -574,6 +581,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.items, target_project=payload.target_project, tenant=payload.tenant
         )
         return {"items": [item.model_dump(mode="json") for item in selected]}
+
+    @api.post("/v1/context/compact")
+    def context_compact(payload: ContextCompact) -> dict[str, Any]:
+        selected = container.context.select(
+            payload.items,
+            target_project=payload.target_project,
+            tenant=payload.tenant,
+        )
+        result = container.compactor.compact(
+            selected,
+            max_chars=payload.max_chars,
+            pinned_sources=payload.pinned_sources,
+        )
+        return result.model_dump(mode="json")
 
     @api.post("/v1/scenarios/compare")
     def compare_scenarios(payload: ScenarioCompare) -> dict[str, Any]:
