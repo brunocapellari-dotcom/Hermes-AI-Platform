@@ -145,3 +145,18 @@ def test_tool_gateway_enforces_timeout() -> None:
     )
     with pytest.raises(TimeoutError, match="timed out"):
         asyncio.run(gateway.execute(actor="owner", tool_id="slow", payload={}))
+
+
+def test_external_action_kill_switch_cannot_be_overridden_by_money_approval() -> None:
+    decision = DefaultPolicyEngine(allow_external_actions=False).authorize(
+        PolicyRequest(
+            actor="agent",
+            action="pay",
+            risk=RiskLevel.CRITICAL,
+            external_write=True,
+            money=True,
+        )
+    )
+    assert decision.allowed is False
+    assert decision.requires_approval is False
+    assert "external writes disabled" in decision.reason
