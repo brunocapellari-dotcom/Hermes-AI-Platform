@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol
 
+from hermes.approval import ApprovalRequired, ApprovalStore
 from hermes.context_controls import ToolOutputEnvelope, ToolOutputLimiter, ToolSearchIndex, ToolSearchMatch
 from hermes.domain import PolicyDecision, PolicyRequest, RiskLevel, ToolSpec, TrustLevel
 
@@ -65,9 +66,11 @@ class ToolGateway:
         policy: PolicyEngine,
         *,
         output_limiter: ToolOutputLimiter | None = None,
+        approvals: ApprovalStore | None = None,
     ) -> None:
         self.policy = policy
         self.output_limiter = output_limiter or ToolOutputLimiter()
+        self.approvals = approvals
         self._tools: dict[str, tuple[ToolSpec, ToolHandler]] = {}
         self._calls: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 
@@ -103,6 +106,7 @@ class ToolGateway:
         tool_id: str,
         payload: Mapping[str, Any],
         trust: TrustLevel = TrustLevel.TRUSTED,
+        approval_id: str | None = None,
     ) -> Mapping[str, Any]:
         spec, handler = self._tools[tool_id]
         decision = self.policy.authorize(
@@ -119,10 +123,28 @@ class ToolGateway:
                 production_admin=spec.permissions.production_admin,
             )
         )
-        if not decision.allowed:
-            raise PermissionError(decision.reason)
+        action = f"tool:{tool_id}"
+        resource = f"tool:{tool_id}"
         if decision.requires_approval:
-            raise PermissionError(f"owner approval required: {decision.reason}")
+            if self.approvals is None:
+                raise PermissionError(f"owner approval required: {decision.reason}")
+            if approval_id is None:
+                record = self.approvals.request(
+                    actor=actor,
+                    action=action,
+                    resource=resource,
+                    payload=dict(payload),
+                )
+                raise ApprovalRequired(record.approval_id, decision.reason)
+            self.approvals.consume(
+                approval_id,
+                actor=actor,
+                action=action,
+                resource=resource,
+                payload=dict(payload),
+            )
+        elif not decision.allowed:
+            raise PermissionError(decision.reason)
         self._admit_rate(actor, spec)
         try:
             return await asyncio.wait_for(handler(payload), timeout=spec.timeout_seconds)
