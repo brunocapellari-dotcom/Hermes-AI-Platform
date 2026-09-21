@@ -87,6 +87,20 @@ class PersistentImprovementEngine:
         )
         return proposal
 
+    def _transition(
+        self,
+        current: ImprovementProposal,
+        updated: ImprovementProposal,
+    ) -> ImprovementProposal:
+        item = self.registry.compare_and_set_status(
+            RegistryKind.IMPROVEMENT,
+            current.proposal_id,
+            expected_status=current.stage.value,
+            new_status=updated.stage.value,
+            payload=updated.model_dump(mode="json"),
+        )
+        return ImprovementProposal.model_validate(item.payload)
+
     def get(self, proposal_id: str) -> ImprovementProposal | None:
         item = self.registry.get(RegistryKind.IMPROVEMENT, proposal_id)
         if item is None:
@@ -119,7 +133,9 @@ class PersistentImprovementEngine:
             current.previous_version = submitted.previous_version
         if current.proposed_version is None:
             current.proposed_version = submitted.proposed_version
-        return self._save(self.engine.advance(current))
+        previous = current.model_copy(deep=True)
+        updated = self.engine.advance(current)
+        return self._transition(previous, updated)
 
     def reject(self, proposal_id: str) -> ImprovementProposal:
         current = self.get(proposal_id)
@@ -131,10 +147,14 @@ class PersistentImprovementEngine:
             ImprovementStage.REJECTED,
         }:
             raise ValueError(f"stage cannot reject: {current.stage}")
-        return self._save(self.engine.reject(current))
+        previous = current.model_copy(deep=True)
+        updated = self.engine.reject(current)
+        return self._transition(previous, updated)
 
     def rollback(self, proposal_id: str) -> ImprovementProposal:
         current = self.get(proposal_id)
         if current is None:
             raise KeyError(proposal_id)
-        return self._save(self.engine.rollback(current))
+        previous = current.model_copy(deep=True)
+        updated = self.engine.rollback(current)
+        return self._transition(previous, updated)
