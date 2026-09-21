@@ -304,6 +304,30 @@ PLATFORM_COMPONENT_DECISIONS: tuple[ComponentDecision, ...] = (
         canonical_owner="HERMES_EVALUATION",
         rationale="specialized RAG evaluation for Second Brain/retrieval pipelines, not general agent regression",
     ),
+    ComponentDecision(
+        component="E2B Runtime",
+        responsibility="untrusted code sandbox service",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_SANDBOX_SERVICE",
+        rationale="Firecracker microVM isolation, per-sandbox egress controls, OTel and GCP/self-host options fit a separate coder execution plane",
+        constraints=["separate service from Hermes API", "KVM host required", "no direct credential inheritance"],
+    ),
+    ComponentDecision(
+        component="nsjail",
+        responsibility="lightweight Linux process sandbox",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_SANDBOX_SERVICE",
+        rationale="namespaces, cgroups, rlimits and seccomp make it a strong lightweight benchmark on controlled Linux hosts",
+        constraints=["never run privileged inside Hermes API container", "kernel feature validation required"],
+    ),
+    ComponentDecision(
+        component="gVisor runsc",
+        responsibility="OCI/Kubernetes sandbox runtime",
+        decision=AdoptionDecision.RESERVE,
+        canonical_owner="HERMES_SANDBOX_SERVICE",
+        rationale="strong container isolation and GKE Sandbox support; direct command-execution SDK remains experimental",
+        constraints=["prefer GKE RuntimeClass integration over experimental SDK"],
+    ),
 )
 
 
