@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from hermes.ai_core import AIService
+from hermes.approval import ApprovalStatus, SqlApprovalStore
 from hermes.auth import authenticated_actor
 from hermes.architecture_policy import (
     PLATFORM_COMPONENT_DECISIONS,
@@ -158,6 +159,7 @@ class AppContainer:
         self.mission_store = SqlMissionStore(self.db)
         self.audit = SqlAuditSink(self.db)
         self.registry = SqlRegistry(self.db)
+        self.approvals = SqlApprovalStore(self.registry)
         self.models = PersistentModelRegistry(self.registry)
         self.usage = SqlUsageStore(self.db)
         self.world_state = WorldStateBuilder(
@@ -320,6 +322,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "evaluation_strategy",
                 "tool_search",
                 "tool_output_limits",
+                "persistent_tool_approval",
+                "sandbox_coder_contract",
                 "embedding",
                 "vision",
                 "speech_to_text",
@@ -357,6 +361,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @api.get("/v1/mcp/benchmark/{target}")
     def mcp_benchmark(target: MCPBenchmarkTarget) -> list[dict[str, Any]]:
         return [item.model_dump(mode="json") for item in scenarios_for(target)]
+
+    @api.get("/v1/approvals")
+    def list_approvals(status: ApprovalStatus | None = None) -> list[dict[str, Any]]:
+        return [
+            item.model_dump(mode="json")
+            for item in container.approvals.list(status=status)
+        ]
+
+    @api.get("/v1/approvals/{approval_id}")
+    def get_approval(approval_id: str) -> dict[str, Any]:
+        record = container.approvals.get(approval_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="approval not found")
+        return record.model_dump(mode="json")
+
+    @api.post("/v1/approvals/{approval_id}/approve")
+    def approve_action(approval_id: str) -> dict[str, Any]:
+        approver = authenticated_actor("local-owner") or "local-owner"
+        try:
+            record = container.approvals.approve(approval_id, approver=approver)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="approval not found") from exc
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        container.audit.record(
+            "approval.approved",
+            approver,
+            {"approval_id": approval_id, "action": record.action, "resource": record.resource},
+        )
+        return record.model_dump(mode="json")
+
+    @api.post("/v1/approvals/{approval_id}/reject")
+    def reject_action(approval_id: str) -> dict[str, Any]:
+        approver = authenticated_actor("local-owner") or "local-owner"
+        try:
+            record = container.approvals.reject(approval_id, approver=approver)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="approval not found") from exc
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        container.audit.record(
+            "approval.rejected",
+            approver,
+            {"approval_id": approval_id, "action": record.action, "resource": record.resource},
+        )
+        return record.model_dump(mode="json")
 
     @api.post("/v1/missions")
     async def create_mission(payload: MissionCreate) -> dict[str, Any]:
