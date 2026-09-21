@@ -658,7 +658,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def advance_improvement(payload: ImprovementProposal) -> dict[str, Any]:
         try:
             return container.improvements.advance(payload).model_dump(mode="json")
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @api.post("/v1/improvements/{proposal_id}/reject")
@@ -667,7 +667,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return container.improvements.reject(proposal_id).model_dump(mode="json")
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="improvement not found") from exc
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @api.post("/v1/improvements/{proposal_id}/rollback")
@@ -676,7 +676,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return container.improvements.rollback(proposal_id).model_dump(mode="json")
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="improvement not found") from exc
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @api.post("/v1/projects/validate")
