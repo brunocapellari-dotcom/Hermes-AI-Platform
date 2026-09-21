@@ -107,4 +107,6 @@ class ToolGateway:
         )
         if not decision.allowed:
             raise PermissionError(decision.reason)
+        if decision.requires_approval:
+            raise PermissionError(f"owner approval required: {decision.reason}")
         return await handler(payload)
