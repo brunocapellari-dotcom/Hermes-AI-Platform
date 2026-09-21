@@ -21,6 +21,7 @@ from hermes.cloud_sql import close_cloud_sql_resources
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
 from hermes.config import Settings, get_settings
 from hermes.context import ContextItem, ContextRouter
+from hermes.contracts import DurableDispatcher
 from hermes.control_center import ControlCenter
 from hermes.decision import HypothesisEngine, ScenarioEngine, ScenarioOption
 from hermes.domain import AgentSpec, ModelClass, ModelRouteRequest, PolicyRequest, TrustLevel
@@ -241,7 +242,7 @@ class AppContainer:
             intelligence=self.model_intelligence,
             privacy=self.privacy,
         )
-        self.durable = (
+        self.durable: DurableDispatcher | None = (
             DBOSMissionDispatcher(
                 settings.dbos_system_database_url,
                 application_name=settings.dbos_application_name,
