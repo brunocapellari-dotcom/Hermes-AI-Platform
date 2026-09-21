@@ -58,3 +58,32 @@ def test_tool_gateway_enforces_policy_before_handler() -> None:
             gateway.execute(actor="agent", tool_id="write-external", payload={"x": 1})
         )
     assert not called
+
+
+def test_tool_gateway_search_and_output_bounds() -> None:
+    async def handler(payload):
+        return payload
+
+    gateway = ToolGateway(DefaultPolicyEngine())
+    gateway.register(
+        ToolSpec(
+            tool_id="repo_search",
+            owner="research",
+            description="search repository code",
+            tags={"github", "code"},
+        ),
+        handler,
+    )
+    gateway.register(
+        ToolSpec(
+            tool_id="market_quote",
+            owner="finance",
+            description="market price lookup",
+            tags={"market"},
+        ),
+        handler,
+    )
+    assert [item.tool_id for item in gateway.search("github code")] == ["repo_search"]
+    bounded = gateway.bound_output("x" * 70_000)
+    assert bounded.truncated
+    assert bounded.original_chars == 70_000
