@@ -71,7 +71,7 @@ class ContextCompactor:
                 retained[index] = item
                 remaining -= size
                 continue
-            if remaining >= 512:
+            if remaining >= 256:
                 limited = ToolOutputLimiter(
                     max_chars=remaining,
                     tail_chars=min(512, remaining // 4),
