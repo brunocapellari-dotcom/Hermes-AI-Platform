@@ -233,9 +233,26 @@ variable "db_tier" {
 }
 
 variable "runtime_enabled" {
-  description = "Enable Cloud Run API and worker only after IAM database users, migrations and live gates are ready."
+  description = "Enable the Hermes Cloud Run API only after IAM database users, migrations and live gates are ready."
   type        = bool
   default     = false
+}
+
+variable "dbos_reference_enabled" {
+  description = "Enable DBOS reference dispatcher/worker resources for benchmark/staging. This is not a permanent durable-engine selection."
+  type        = bool
+  default     = false
+}
+
+variable "release_version" {
+  description = "Immutable Hermes application version/commit used for durable workflow versioning and audit."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.release_version == "" || length(trimspace(var.release_version)) >= 7
+    error_message = "release_version must be empty or an immutable release/commit identifier of at least 7 characters."
+  }
 }
 
 variable "vpc_cidr" {
