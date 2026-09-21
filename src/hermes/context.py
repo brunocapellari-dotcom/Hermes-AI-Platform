@@ -47,21 +47,28 @@ class ContextCompactor:
             raise ValueError("context budget must be at least 512 characters")
         pinned_sources = pinned_sources or set()
         original_chars = sum(len(item.content) for item in items)
-        pinned = [item for item in items if item.source in pinned_sources]
-        regular = [item for item in items if item.source not in pinned_sources]
-        pinned_chars = sum(len(item.content) for item in pinned)
+        pinned_indices = [
+            index for index, item in enumerate(items) if item.source in pinned_sources
+        ]
+        regular_indices = [
+            index for index, item in enumerate(items) if item.source not in pinned_sources
+        ]
+        pinned_chars = sum(len(items[index].content) for index in pinned_indices)
         if pinned_chars > max_chars:
             raise ValueError("pinned context exceeds configured budget")
 
-        retained: list[ContextItem] = list(pinned)
+        retained: dict[int, ContextItem] = {
+            index: items[index] for index in pinned_indices
+        }
         omitted: list[str] = []
         truncated: list[str] = []
         remaining = max_chars - pinned_chars
 
-        for index, item in enumerate(regular):
+        for position, index in enumerate(regular_indices):
+            item = items[index]
             size = len(item.content)
             if size <= remaining:
-                retained.append(item)
+                retained[index] = item
                 remaining -= size
                 continue
             if remaining >= 512:
@@ -69,23 +76,21 @@ class ContextCompactor:
                     max_chars=remaining,
                     tail_chars=min(512, remaining // 4),
                 ).limit(item.content)
-                retained.append(item.model_copy(update={"content": limited.content}))
+                retained[index] = item.model_copy(update={"content": limited.content})
                 truncated.append(item.source)
                 remaining = 0
             else:
                 omitted.append(item.source)
-            omitted.extend(next_item.source for next_item in regular[index + 1 :])
+            omitted.extend(
+                items[next_index].source
+                for next_index in regular_indices[position + 1 :]
+            )
             break
 
-        retained_by_original_order = [
-            item
-            for original in items
-            for item in retained
-            if item.source == original.source and item.project == original.project
-        ]
-        retained_chars = sum(len(item.content) for item in retained_by_original_order)
+        compacted = [retained[index] for index in sorted(retained)]
+        retained_chars = sum(len(item.content) for item in compacted)
         return ContextCompactionResult(
-            items=retained_by_original_order,
+            items=compacted,
             original_chars=original_chars,
             retained_chars=retained_chars,
             omitted_sources=omitted,
