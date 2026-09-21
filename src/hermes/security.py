@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import re
+import time
+from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol
 
@@ -66,6 +69,7 @@ class ToolGateway:
         self.policy = policy
         self.output_limiter = output_limiter or ToolOutputLimiter()
         self._tools: dict[str, tuple[ToolSpec, ToolHandler]] = {}
+        self._calls: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 
     def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
         if spec.tool_id in self._tools:
@@ -81,6 +85,16 @@ class ToolGateway:
 
     def bound_output(self, content: str) -> ToolOutputEnvelope:
         return self.output_limiter.limit(content)
+
+    def _admit_rate(self, actor: str, spec: ToolSpec) -> None:
+        now = time.monotonic()
+        key = (actor, spec.tool_id)
+        calls = self._calls[key]
+        while calls and now - calls[0] >= 60:
+            calls.popleft()
+        if len(calls) >= spec.rate_limit_per_minute:
+            raise PermissionError("tool rate limit exceeded")
+        calls.append(now)
 
     async def execute(
         self,
@@ -109,4 +123,8 @@ class ToolGateway:
             raise PermissionError(decision.reason)
         if decision.requires_approval:
             raise PermissionError(f"owner approval required: {decision.reason}")
-        return await handler(payload)
+        self._admit_rate(actor, spec)
+        try:
+            return await asyncio.wait_for(handler(payload), timeout=spec.timeout_seconds)
+        except TimeoutError as exc:
+            raise TimeoutError(f"tool execution timed out: {tool_id}") from exc
