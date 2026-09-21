@@ -50,8 +50,22 @@ PROTECTED_OPERATIONS: tuple[ProtectedOperation, ...] = (
     ),
     ProtectedOperation(
         "POST",
+        re.compile(r"^/v1/agents/[^/]+/(?:disable|rollback/[^/]+)$"),
+        "agent:lifecycle",
+        "can_manage_agents",
+        RiskLevel.HIGH,
+    ),
+    ProtectedOperation(
+        "POST",
         re.compile(r"^/v1/skills/promote$"),
         "skill:promote",
+        "can_manage_skills",
+        RiskLevel.MEDIUM,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/v1/skills/[^/]+/(?:disable|rollback/[^/]+)$"),
+        "skill:lifecycle",
         "can_manage_skills",
         RiskLevel.MEDIUM,
     ),
