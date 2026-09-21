@@ -19,6 +19,26 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
         assert capabilities.json()["multimodal_configured"] is False
         assert capabilities.json()["durable_dispatch_configured"] is False
 
+        architecture = client.get("/v1/architecture/components")
+        assert architecture.status_code == 200
+        harness = {item["component"]: item for item in architecture.json()["pydantic_harness"]}
+        assert harness["Memory"]["decision"] == "REJECT"
+        assert harness["OpenTelemetry instrumentation"]["decision"] == "ADOPT"
+
+        durable = client.get("/v1/durable/benchmark/scenarios")
+        assert durable.status_code == 200
+        assert {item["scenario_id"] for item in durable.json()} >= {
+            "crash_resume",
+            "no_duplicate_side_effect",
+            "version_upgrade",
+        }
+
+        strategy = client.get("/v1/evaluation/strategy")
+        assert strategy.status_code == 200
+        routes = {item["purpose"]: item["backend"] for item in strategy.json()}
+        assert routes["endpoint_regression"] == "promptfoo"
+        assert routes["rag"] == "ragas"
+
         mission = client.post("/v1/missions", json={"request": "Como está a Holding?"}).json()
         mission_id = mission["mission_id"]
         dispatch = client.post(f"/v1/missions/{mission_id}/dispatch")
