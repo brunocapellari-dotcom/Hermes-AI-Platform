@@ -88,7 +88,9 @@ class EngineBenchmarkReport(BaseModel):
     def production_gate_passed(self) -> bool:
         required_ids = {item.scenario_id for item in CANONICAL_SCENARIOS if item.required}
         by_id = {m.scenario_id: m for m in self.measurements}
-        if set(by_id) != {m.scenario_id for m in self.measurements}:
+        if len(by_id) != len(self.measurements):
+            return False
+        if any(measurement.engine != self.engine for measurement in self.measurements):
             return False
         if not required_ids.issubset(by_id):
             return False
