@@ -47,6 +47,20 @@ def test_platform_api_contracts(tmp_path: Path) -> None:
             "artifact_signature_provenance",
         }
 
+        budget = client.post(
+            "/v1/budgets",
+            json={
+                "project": "AGROLOG_MT",
+                "max_daily_usd": 5.0,
+                "max_weekly_usd": 20.0,
+                "max_monthly_usd": 60.0,
+            },
+        )
+        assert budget.status_code == 200
+        stored_budget = client.get("/v1/budgets", params={"project": "AGROLOG_MT"})
+        assert stored_budget.status_code == 200
+        assert stored_budget.json()["max_weekly_usd"] == 20.0
+
         mission = client.post("/v1/missions", json={"request": "Como está a Holding?"}).json()
         mission_id = mission["mission_id"]
         dispatch = client.post(f"/v1/missions/{mission_id}/dispatch")
