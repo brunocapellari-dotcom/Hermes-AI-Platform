@@ -70,6 +70,8 @@ def test_usage_summary_and_prometheus(tmp_path: Path) -> None:
             model_id="m",
             operation="generate",
             latency_ms=12,
+            input_tokens=100,
+            cached_input_tokens=60,
             cost_usd=0.25,
         )
     )
@@ -77,7 +79,14 @@ def test_usage_summary_and_prometheus(tmp_path: Path) -> None:
         UsageEvent(operation="generate", success=False, error_type="Boom", latency_ms=2)
     )
     summary = usage.summary()
-    assert summary == {"events": 2, "cost_usd": 0.25, "failures": 1}
+    assert summary == {
+        "events": 2,
+        "cost_usd": 0.25,
+        "failures": 1,
+        "input_tokens": 100,
+        "cached_input_tokens": 60,
+        "cache_hit_ratio": 0.6,
+    }
     body, content_type = prometheus_payload()
     assert b"hermes_ai_requests_total" in body
     assert "text/plain" in content_type
