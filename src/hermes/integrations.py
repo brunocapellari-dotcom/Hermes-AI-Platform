@@ -63,9 +63,27 @@ def _completion_result(data: Mapping[str, Any]) -> CompletionResult:
     output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
     if not isinstance(input_tokens, int) or not isinstance(output_tokens, int):
         raise ValueError("model gateway token usage must be integers")
+
+    cache_details = usage.get("prompt_tokens_details")
+    if cache_details is None:
+        cache_details = usage.get("input_tokens_details")
+    if cache_details is None:
+        cache_details = {}
+    if not isinstance(cache_details, dict):
+        raise ValueError("model gateway cache token details must be an object")
+    cached_input_tokens = cache_details.get(
+        "cached_tokens",
+        usage.get("cache_read_input_tokens", 0),
+    )
+    if not isinstance(cached_input_tokens, int):
+        raise ValueError("model gateway cached token usage must be an integer")
+    safe_input_tokens = max(input_tokens, 0)
+    safe_cached_tokens = min(max(cached_input_tokens, 0), safe_input_tokens)
+
     return CompletionResult(
         content=content,
-        input_tokens=max(input_tokens, 0),
+        input_tokens=safe_input_tokens,
+        cached_input_tokens=safe_cached_tokens,
         output_tokens=max(output_tokens, 0),
     )
 
