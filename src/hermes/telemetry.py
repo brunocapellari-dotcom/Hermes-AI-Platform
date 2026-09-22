@@ -72,6 +72,7 @@ class UsageEvent(BaseModel):
     operation: str
     latency_ms: float = Field(default=0, ge=0)
     input_tokens: int = Field(default=0, ge=0)
+    cached_input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     cost_usd: float = Field(default=0, ge=0)
     success: bool = True
@@ -111,10 +112,24 @@ class SqlUsageStore:
             failures = session.scalar(
                 select(func.count()).select_from(UsageRow).where(UsageRow.success.is_(False))
             ) or 0
+            input_tokens = session.scalar(
+                select(func.coalesce(func.sum(UsageRow.input_tokens), 0))
+            ) or 0
+            cached_input_tokens = session.scalar(
+                select(func.coalesce(func.sum(UsageRow.cached_input_tokens), 0))
+            ) or 0
+            cache_hit_ratio = (
+                float(cached_input_tokens) / float(input_tokens)
+                if int(input_tokens) > 0
+                else 0.0
+            )
             return {
                 "events": int(count),
                 "cost_usd": round(float(cost), 6),
                 "failures": int(failures),
+                "input_tokens": int(input_tokens),
+                "cached_input_tokens": int(cached_input_tokens),
+                "cache_hit_ratio": round(cache_hit_ratio, 4),
             }
 
 
