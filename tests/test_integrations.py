@@ -88,6 +88,28 @@ def test_openai_compatible_gateway_success_and_validation() -> None:
             asyncio.run(gateway.complete(model="m", system="s", user="u"))
 
 
+def test_model_gateway_parses_cached_input_tokens() -> None:
+    gateway = OpenAICompatibleGateway("https://gateway.test")
+    FakeAsyncClient.responses = [
+        FakeResponse(
+            {
+                "choices": [{"message": {"content": "ok"}}],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "prompt_tokens_details": {"cached_tokens": 75},
+                },
+            }
+        )
+    ]
+    result = asyncio.run(
+        gateway.complete_metered(model="m", system="s", user="u")
+    )
+    assert result.input_tokens == 100
+    assert result.cached_input_tokens == 75
+    assert result.output_tokens == 20
+
+
 def test_model_gateway_separates_cloud_run_and_app_auth(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_SERVICE_TO_SERVICE_AUTH", "true")
     monkeypatch.setattr(
