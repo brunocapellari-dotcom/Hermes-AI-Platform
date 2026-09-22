@@ -42,6 +42,7 @@ from hermes.orchestrator import HermesOrchestrator
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.privacy import SensitiveDataGuard
 from hermes.recovery import FailureRecoveryEngine
+from hermes.release_integrity import release_integrity
 from hermes.registry import PersistentModelRegistry, RegistryKind, SqlRegistry
 from hermes.routing import ProjectRouter
 from hermes.security import PromptInjectionDetector
@@ -297,9 +298,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.get("/ready")
     def ready() -> dict[str, str]:
+        integrity = release_integrity(
+            production=settings.is_production,
+            version=settings.version,
+            dependency_lock_sha256=settings.dependency_lock_sha256,
+        )
+        if not integrity.ready:
+            raise HTTPException(
+                status_code=503,
+                detail={"reason": "release integrity blocked", "blockers": integrity.blockers},
+            )
         with container.db.engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ready"}
+
+    @api.get("/v1/release/readiness")
+    def release_readiness() -> dict[str, Any]:
+        return release_integrity(
+            production=settings.is_production,
+            version=settings.version,
+            dependency_lock_sha256=settings.dependency_lock_sha256,
+        ).model_dump(mode="json")
 
     @api.get("/v1/capabilities")
     def capabilities() -> dict[str, Any]:
@@ -335,6 +354,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "persistent_tool_approval",
                 "multi_window_spend_limits",
                 "cache_efficiency_monitoring",
+                "release_integrity_gate",
                 "sandbox_coder_contract",
                 "embedding",
                 "vision",
