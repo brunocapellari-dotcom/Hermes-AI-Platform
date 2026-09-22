@@ -97,7 +97,7 @@ class AIService:
         mission_id: str | None,
         project: str | None,
         task_class: ModelClass,
-    ) -> tuple[str, int, int]:
+    ) -> tuple[str, int, int, int]:
         attributes: dict[str, str | int | float | bool] = {
             "hermes.model.id": profile.model_id,
             "hermes.model.provider": profile.provider,
@@ -117,14 +117,23 @@ class AIService:
                         user=user,
                     )
                     span.set_attribute("hermes.tokens.input", completion.input_tokens)
+                    span.set_attribute(
+                        "hermes.tokens.cached_input",
+                        completion.cached_input_tokens,
+                    )
                     span.set_attribute("hermes.tokens.output", completion.output_tokens)
-                    return completion.content, completion.input_tokens, completion.output_tokens
+                    return (
+                        completion.content,
+                        completion.input_tokens,
+                        completion.cached_input_tokens,
+                        completion.output_tokens,
+                    )
                 content = await self.gateway.complete(
                     model=profile.model,
                     system=system,
                     user=user,
                 )
-                return content, 0, 0
+                return content, 0, 0, 0
             except Exception as exc:
                 span.record_exception(exc)
                 raise
@@ -186,9 +195,15 @@ class AIService:
                 outbound_system = system_scan.redacted
                 outbound_user = user_scan.redacted
             input_tokens = 0
+            cached_input_tokens = 0
             output_tokens = 0
             try:
-                content, input_tokens, output_tokens = await self._invoke_gateway(
+                (
+                    content,
+                    input_tokens,
+                    cached_input_tokens,
+                    output_tokens,
+                ) = await self._invoke_gateway(
                     profile=profile,
                     system=outbound_system,
                     user=outbound_user,
@@ -232,6 +247,7 @@ class AIService:
                     operation="generate",
                     latency_ms=latency_ms,
                     input_tokens=input_tokens,
+                    cached_input_tokens=cached_input_tokens,
                     output_tokens=output_tokens,
                     cost_usd=cost_usd,
                     success=True,
