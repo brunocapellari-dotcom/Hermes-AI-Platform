@@ -16,11 +16,6 @@ def upgrade() -> None:
         "hermes_usage_events",
         sa.Column("cached_input_tokens", sa.Integer(), nullable=False, server_default="0"),
     )
-    op.alter_column(
-        "hermes_usage_events",
-        "cached_input_tokens",
-        server_default=None,
-    )
 
 
 def downgrade() -> None:
