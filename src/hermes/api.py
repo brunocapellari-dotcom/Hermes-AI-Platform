@@ -334,6 +334,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "tool_output_limits",
                 "persistent_tool_approval",
                 "multi_window_spend_limits",
+                "cache_efficiency_monitoring",
                 "sandbox_coder_contract",
                 "embedding",
                 "vision",
@@ -705,6 +706,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @api.get("/v1/telemetry/summary")
     def telemetry_summary() -> dict[str, Any]:
         return container.usage.summary()
+
+    @api.get("/v1/telemetry/cache-efficiency")
+    def cache_efficiency(
+        project: str | None = None,
+        model_id: str | None = None,
+    ) -> dict[str, Any]:
+        return container.usage.cache_efficiency(
+            project=project,
+            model_id=model_id,
+        ).model_dump(mode="json")
 
     @api.get("/metrics")
     def metrics() -> Response:
