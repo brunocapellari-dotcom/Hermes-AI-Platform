@@ -80,6 +80,18 @@ class UsageEvent(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class CacheEfficiencyReport(BaseModel):
+    project: str | None = None
+    model_id: str | None = None
+    events_with_input: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    cached_input_tokens: int = Field(ge=0)
+    cache_hit_ratio: float = Field(ge=0, le=1)
+    cached_events: int = Field(ge=0)
+    uncached_events: int = Field(ge=0)
+    low_cache_reuse_signal: bool = False
+
+
 class SqlUsageStore:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -104,6 +116,50 @@ class SqlUsageStore:
         with self.db.sessions() as session:
             value = session.scalar(statement) or 0.0
         return round(float(value), 6)
+
+    def cache_efficiency(
+        self,
+        *,
+        project: str | None = None,
+        model_id: str | None = None,
+    ) -> CacheEfficiencyReport:
+        filters = [UsageRow.input_tokens > 0]
+        if project is not None:
+            filters.append(UsageRow.project == project)
+        if model_id is not None:
+            filters.append(UsageRow.model_id == model_id)
+        with self.db.sessions() as session:
+            events = session.scalar(
+                select(func.count()).select_from(UsageRow).where(*filters)
+            ) or 0
+            input_tokens = session.scalar(
+                select(func.coalesce(func.sum(UsageRow.input_tokens), 0)).where(*filters)
+            ) or 0
+            cached_tokens = session.scalar(
+                select(func.coalesce(func.sum(UsageRow.cached_input_tokens), 0)).where(*filters)
+            ) or 0
+            cached_events = session.scalar(
+                select(func.count())
+                .select_from(UsageRow)
+                .where(*filters, UsageRow.cached_input_tokens > 0)
+            ) or 0
+            uncached_events = int(events) - int(cached_events)
+        ratio = float(cached_tokens) / float(input_tokens) if int(input_tokens) else 0.0
+        return CacheEfficiencyReport(
+            project=project,
+            model_id=model_id,
+            events_with_input=int(events),
+            input_tokens=int(input_tokens),
+            cached_input_tokens=int(cached_tokens),
+            cache_hit_ratio=round(ratio, 4),
+            cached_events=int(cached_events),
+            uncached_events=max(uncached_events, 0),
+            low_cache_reuse_signal=(
+                int(events) >= 5
+                and int(cached_events) > 0
+                and ratio < 0.25
+            ),
+        )
 
     def summary(self) -> dict[str, Any]:
         with self.db.sessions() as session:
