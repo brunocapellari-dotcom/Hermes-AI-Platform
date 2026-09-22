@@ -113,6 +113,11 @@ def test_unknown_durable_scenario_is_rejected() -> None:
 def test_platform_component_policy_prevents_duplicate_framework_ownership() -> None:
     validate_all_component_matrices()
     by_name = {item.component: item for item in PLATFORM_COMPONENT_DECISIONS}
+    assert by_name["LiteLLM"].decision == AdoptionDecision.ADOPT
+    assert by_name["Bifrost"].decision == AdoptionDecision.BENCHMARK
+    assert by_name["agentgateway"].decision == AdoptionDecision.BENCHMARK
+    assert by_name["TensorZero"].decision == AdoptionDecision.REJECT
+    assert by_name["Helicone"].decision == AdoptionDecision.REJECT
     assert {
         by_name["DBOS"].decision,
         by_name["Temporal"].decision,
