@@ -92,6 +92,11 @@ resource "google_cloud_run_v2_worker_pool" "hermes_worker" {
       }
 
       env {
+        name  = "HERMES_DEPENDENCY_LOCK_SHA256"
+        value = lower(var.dependency_lock_sha256)
+      }
+
+      env {
         name  = "HERMES_DBOS_APPLICATION_NAME"
         value = "hermes-worker"
       }
