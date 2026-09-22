@@ -2,22 +2,23 @@
 
 Decision categories: **ADOPT**, **ADOPT PATTERN**, **PRIMARY CANDIDATE**, **BENCHMARK**, **RESERVE**, **REJECT**. A tool becomes production-operational only after objective repository and live evidence. Similar products are not installed in parallel unless they cover materially different failure modes.
 
-Last architecture review: 2026-09-21.
+Last architecture review: 2026-09-22.
 
 | Responsibility | Decision | Tool | Canonical Hermes owner | Rationale |
 |---|---|---|---|---|
 | model/provider gateway | ADOPT | LiteLLM | ModelGateway | provider abstraction remains behind Hermes contract; no second gateway by default |
-| agent capability library | ADOPT PATTERN / BENCHMARK | Pydantic AI Harness 0.32.x | Agent/Skill Factory + Context/Tool/Security layers | selectively reuse capability ideas; Harness is not Hermes and 0.x APIs may move |
+| agent capability library | ADOPT PATTERN / BENCHMARK | Pydantic AI v2.47.0 + official Harness | Agent/Skill Factory + Context/Tool/Security layers | selectively reuse mature capability contracts while Hermes keeps authority/state ownership |
 | durable execution | BENCHMARK | DBOS 2.31.x / 3.x migration track | Hermes Durable Engine | current implementation candidate; must pass neutral crash/idempotency/version benchmark |
 | durable execution | BENCHMARK | Temporal Python SDK | Hermes Durable Engine | mature replay/versioning and multi-language control plane; operational overhead must be measured |
 | durable execution | BENCHMARK | Restate Python SDK 1.x | Hermes Durable Engine | durable services/workflows, exactly-once-per-ID patterns and Pydantic AI integration merit equal benchmark |
 | operational schema migrations | ADOPT | Alembic | Database migration boundary | explicit versioned migrations; runtime processes do not perform DDL |
 | policy authorization | ADOPT | OPA | PolicyEngine | deterministic policy outside model prompts, fail closed |
 | relationship authorization | ADOPT | OpenFGA | PolicyEngine | subject-relation-object authorization complements OPA |
-| MCP runtime/isolation | BENCHMARK | ToolHive 0.50.x | Hermes MCP Gateway | evaluate permission profiles, signed artifacts, registry, virtual MCP and isolated runtime; recent security fixes require regression tests |
-| MCP federation/A2A/plugins | BENCHMARK | IBM ContextForge 1.0.x | Hermes MCP Gateway | use only if federation/A2A/plugin hooks add measurable value; never create second canonical registry/RBAC/policy authority |
+| MCP runtime/isolation | BENCHMARK | ToolHive 0.51.0 | Hermes MCP Gateway | evaluate permission profiles, SPIFFE JWT-SVID auth, signed artifacts, registry and Virtual MCP; security-advisory regressions remain mandatory |
+| MCP federation/A2A/plugins | BENCHMARK | IBM ContextForge 1.0.7-20260921 | Hermes MCP Gateway | active Apache-2.0 option for federation/A2A/plugin hooks; never create second canonical registry/RBAC/policy authority |
 | telemetry standard | ADOPT | OpenTelemetry | Hermes OTel | vendor-neutral tracing/metrics; canonical telemetry interface |
-| AI observability backend | ADOPT OPTIONAL BACKEND | Arize Phoenix 20.x | Hermes OTel | preferred trace/eval UI over OTel; not operational source of truth and not a replacement for Hermes ledger |
+| AI observability backend | ADOPT OPTIONAL BACKEND | Langfuse 4.41.x | Hermes OTel | preferred backend: native OTLP/HTTP ingestion, strong self-host/GCP support, datasets/evals and MIT core; not operational source of truth |
+| alternate AI observability backend | RESERVE | Arize Phoenix | Hermes OTel | strong OTel/eval alternative but overlaps Langfuse and uses Elastic License 2.0; do not deploy both by default |
 | LLM regression/red-team | ADOPT WHEN LIVE TARGET EXISTS | Promptfoo | Hermes Evaluation | primary declarative CI regression and adversarial testing |
 | Python-specific LLM assertions | RESERVE | DeepEval | Hermes Evaluation | add only for Python-native component tests or metrics not already covered |
 | RAG evaluation | ADOPT WHEN RAG LIVE | Ragas | Hermes Evaluation | specialist retrieval/faithfulness/context evaluation for Second Brain/RAG paths |
@@ -25,6 +26,10 @@ Last architecture review: 2026-09-21.
 | local GPU serving | PRIMARY CANDIDATE | vLLM | Model serving adapter | promote only by hardware/model throughput/latency/quality benchmark |
 | local CPU/edge inference | PRIMARY CANDIDATE | llama.cpp | Model serving adapter | lightweight local inference; promote by real hardware benchmark |
 | alternative GPU/multimodal serving | BENCHMARK | SGLang | Model serving adapter | use only if it materially beats the primary candidate |
+| restricted tool orchestration | BENCHMARK | Pydantic Monty v1.0.0-beta.2 / Code Mode | Hermes Tool Orchestration | no filesystem/network/env by default; benchmark context/cost gains before direct dependency |
+| OS-level code sandbox | BENCHMARK | E2B | Hermes Sandbox Service | Apache-2.0, active, GCP self-host/BYOC and isolated sandboxes; benchmark against nsjail |
+| lightweight OS sandbox | BENCHMARK | nsjail 3.6 | Hermes Sandbox Service | Linux namespaces/cgroups/seccomp option for controlled hosts |
+| abandoned sandbox | REJECT | Daytona OSS | Hermes Sandbox Service | repository explicitly unmaintained since June 2026 |
 | alternate model gateway | BENCHMARK | Bifrost / agentgateway | ModelGateway | consider only if measured benefits exceed migration and security cost |
 | legacy prompt guard | REJECT | ProtectAI LLM Guard | Hermes Security | upstream archived; do not add an archived core dependency |
 
@@ -75,7 +80,7 @@ ContextForge is evaluated for federation, A2A and plugin-hook semantics. Its reg
 
 ## Observability selection rule
 
-OpenTelemetry is canonical. Phoenix is the preferred optional AI-observability backend/viewer because it can consume trace data without changing Hermes state ownership. PostgreSQL usage/audit ledgers remain canonical operational evidence; Phoenix must never become a second source of truth.
+OpenTelemetry is canonical. Langfuse is the preferred optional AI-observability backend because its core is MIT-licensed, it accepts OTLP/HTTP traces directly, has active GCP/Kubernetes self-hosting support and covers tracing, datasets and evaluations. PostgreSQL usage/audit ledgers remain canonical operational evidence. Phoenix is retained only as a benchmark/reserve alternative; never deploy both without a documented need.
 
 ## Anti-sprawl rules
 
