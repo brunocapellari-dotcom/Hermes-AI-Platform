@@ -255,6 +255,17 @@ variable "release_version" {
   }
 }
 
+variable "dependency_lock_sha256" {
+  description = "SHA-256 of the generated uv.lock used to build the immutable Hermes release."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.dependency_lock_sha256 == "" || can(regex("^[0-9a-f]{64}$", lower(var.dependency_lock_sha256)))
+    error_message = "dependency_lock_sha256 must be empty or a 64-character hexadecimal SHA-256."
+  }
+}
+
 variable "vpc_cidr" {
   type    = string
   default = "10.40.0.0/24"
