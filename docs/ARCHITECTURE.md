@@ -28,9 +28,13 @@ Google Cloud Run + Cloud SQL PostgreSQL + Secret Manager + Artifact Registry + B
 
 Terraform intentionally defaults `runtime_enabled=false`: the first apply can create network/database/secret containers without embedding secret values in Terraform state. Runtime deployment is enabled only after the pinned secret versions are populated through an authorized secret-management path.
 
-## Model gateway
+## Model gateway and agentic data plane
 
-Primary candidate: LiteLLM behind the Hermes `ModelGateway` contract. Bifrost and agentgateway are benchmark alternatives, not second concurrent gateways. Agentgateway must pass the Hermes Security Test Lab before promotion because its project disclosed multiple 2026 advisories involving MCP authorization/routing/sanitization.
+LiteLLM is the adopted primary multi-provider model gateway behind the Hermes ModelGateway contract. Bifrost remains the only direct replacement benchmark and must run the same scenarios in src/hermes/model_gateway_benchmark.py before any switch.
+
+Agentgateway is not treated as a second ordinary model gateway. It is a benchmark candidate for a broader agentic data plane spanning LLM, MCP and A2A traffic. Promotion requires measurable consolidation value while Hermes retains OPA/OpenFGA authority and canonical registries.
+
+TensorZero is rejected because its upstream repository is archived. Helicone is rejected from the Hermes stack because its observability responsibility duplicates OpenTelemetry + Langfuse.
 
 ## Durable work
 
@@ -44,13 +48,15 @@ All candidates must pass the same crash/resume, no-duplicate-side-effect, parall
 
 OpenTelemetry is canonical for distributed telemetry. Hermes will follow GenAI semantic conventions where stable, but wraps them to avoid schema lock-in. PostgreSQL usage/audit events remain canonical operational evidence; Prometheus exposes service metrics; BigQuery is the analytical destination in GCP.
 
-Arize Phoenix is the preferred optional AI-observability backend/UI over OpenTelemetry. Phoenix may provide trace exploration, datasets and evaluation workflows, but it never becomes mission state, policy authority, FinOps source of truth or a required runtime dependency.
+Langfuse is the preferred optional AI-observability backend over OpenTelemetry. It may provide trace exploration, datasets, experiments and evaluation workflows, but it never becomes mission state, policy authority, FinOps source of truth or a required runtime dependency. Phoenix remains a reserve alternative and is not deployed in parallel by default.
 
 ## Agent frameworks and capability libraries
 
 Hermes is the platform. LangGraph, Pydantic AI and Pydantic AI Harness are components/reference implementations.
 
-Pydantic AI Harness is audited capability-by-capability. Hermes may adopt patterns such as scoped FileSystem, bounded Shell, RepoContext, Planning, SubAgents, Tool Search, Compaction, Tool Output Limits, Guardrails, Spend Limits, Tool Approval and OpenTelemetry. It does not delegate canonical memory, durable state, policy, registry or authority to the Harness.
+Pydantic AI v2.47.0 and its official Harness are audited capability-by-capability. Hermes adopts useful semantics such as scoped FileSystem/Shell, Repo Context, Planning, SubAgents, Code Mode, Tool Search, Compaction, Tool Output Limits, cache-efficiency monitoring, Guardrails, Spend Limits, Tool Approval and OpenTelemetry while keeping canonical memory, durable state, policy, registry and authority inside Hermes/Second Brain.
+
+Restricted model-written orchestration uses the Hermes CodeModeRuntime boundary; Pydantic Monty is the current benchmark candidate. Arbitrary coding/build execution uses a separate SandboxExecutor service benchmarked across E2B and nsjail, with gVisor reserved for GKE/container isolation. Daytona OSS is rejected because its public repository is no longer maintained.
 
 Coder and Researcher are decomposed rather than imported wholesale for production. In particular, production command execution must remain sandboxed and policy-bound.
 
@@ -71,3 +77,16 @@ Hermes deterministic tests remain mandatory.
 Promptfoo owns endpoint regression and red-team testing. Ragas owns RAG-specific retrieval/context/faithfulness evaluation. DeepEval is optional for Python-specific LLM assertions that are not already covered. Trajectory Judge remains a benchmark capability for long missions.
 
 The routing is executable in src/hermes/evaluation_strategy.py so multiple frameworks do not silently test the same responsibility.
+
+
+## Release integrity
+
+A production release is identified by an immutable Hermes version/commit. Runtime, migration jobs and durable benchmark resources may not be enabled in Terraform without this identity.
+
+The dependency graph must eventually be frozen with a generated uv.lock. A hand-authored lock file is not acceptable. Until a working executor can generate and verify the lock, broad dependency resolution remains an explicit release-readiness gap.
+
+## Approval and self-extension
+
+Sensitive tool actions may require a persistent one-time approval. Approval scope is actor + action + resource + payload hash with TTL and compare-and-set consumption. A hard policy denial remains non-approvable.
+
+Agent/skill replacement and rollback are non-destructive and transactional. Controlled self-improvement stage transitions use compare-and-set semantics. Self-generated capabilities never self-promote.
