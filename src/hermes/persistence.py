@@ -61,6 +61,7 @@ class UsageRow(Base):
     operation: Mapped[str] = mapped_column(String(80), index=True)
     latency_ms: Mapped[float] = mapped_column(Float, default=0)
     input_tokens: Mapped[int] = mapped_column(default=0)
+    cached_input_tokens: Mapped[int] = mapped_column(default=0)
     output_tokens: Mapped[int] = mapped_column(default=0)
     cost_usd: Mapped[float] = mapped_column(Float, default=0)
     success: Mapped[bool] = mapped_column(default=True, index=True)
