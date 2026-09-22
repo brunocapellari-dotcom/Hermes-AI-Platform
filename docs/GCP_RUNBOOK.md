@@ -14,7 +14,7 @@ This runbook is preparation only. No Google Cloud resource should be created fro
 - Artifact Registry: immutable container artifacts.
 - BigQuery: analytical telemetry only; never operational source of truth.
 - OpenTelemetry: canonical trace/metric transport.
-- Phoenix: optional AI-observability backend over OpenTelemetry. It must be removable without changing Hermes correctness.
+- Langfuse: preferred optional AI-observability backend over OpenTelemetry. It must be removable without changing Hermes correctness; Phoenix is reserve only.
 
 ## Durable-engine gate before production runtime
 
@@ -58,11 +58,11 @@ HERMES_OTLP_ENDPOINT is the vendor-neutral export target.
 Preferred production sequence:
 1. prove Hermes API and durable-engine spans through OTLP;
 2. prove mission/workflow/model/tool/project correlation;
-3. point OTLP to Phoenix when an AI-specific trace/evaluation UI is useful;
+3. point OTLP to Langfuse when an AI-specific trace/evaluation UI is useful;
 4. keep PostgreSQL audit/usage ledgers authoritative for operational evidence and FinOps;
 5. export analytical telemetry to BigQuery separately.
 
-Phoenix deployment, storage and authentication are optional infrastructure choices. Do not couple business logic to Phoenix APIs unless an explicit feature requires it.
+Langfuse deployment, storage and authentication are optional infrastructure choices. Do not couple business logic to Langfuse APIs unless an explicit feature requires it. Phoenix is a reserve alternative, not a parallel default.
 
 ## Evaluation gate
 
@@ -77,20 +77,22 @@ DeepEval remains optional and may be installed only when a concrete Python-speci
 1. Repository CI must be fully green on the exact release commit: lint, strict typing, security scan, dependency audit, database migration, pytest coverage >=90%, container build, OPA/OpenFGA validation, supply-chain scans and Terraform validation.
 2. Repository must remain private before internal endpoints, production metadata or credentials are introduced.
 3. Durable-engine benchmark must have an explicit selected engine before declaring final production architecture.
-4. Select/confirm GCP project, billing and region explicitly.
-5. Run Terraform for base infrastructure with runtime_enabled=false.
-6. Verify Cloud SQL IAM/private networking only for database resources still required by the selected architecture.
-7. Execute controlled application migrations under the migration identity.
-8. If DBOS is selected, initialize/migrate its system schema under the migration identity and verify runtime DML-only permissions.
-9. Build/push the exact green commit to Artifact Registry.
-10. Configure private service identities, OPA/OpenFGA and explicit Cloud Run invokers.
-11. Configure model gateway/local model adapters and OpenTelemetry exporter.
-12. Enable runtime only after database/schema/IAM/readiness/policy checks succeed.
-13. Run project adapter contracts, model fallback, privacy/MCP adversarial tests and the selected durable engine's crash/idempotency suite.
-14. Run Promptfoo live regression/red-team.
-15. Run Ragas only if RAG is enabled.
-16. Verify OpenTelemetry trace correlation; add Phoenix if selected as the observability UI/backend.
-17. Exercise backup restore and rollback before production status is allowed.
+4. Model-gateway benchmark must preserve LiteLLM as the selected gateway unless Bifrost demonstrates a measured replacement advantage.
+5. A generated and verified uv.lock is required before the immutable production artifact is built.
+6. Select/confirm GCP project, billing and region explicitly.
+7. Run Terraform for base infrastructure with runtime_enabled=false.
+8. Verify Cloud SQL IAM/private networking only for database resources still required by the selected architecture.
+9. Execute controlled application migrations under the migration identity.
+10. If DBOS is selected, initialize/migrate its system schema under the migration identity and verify runtime DML-only permissions.
+11. Build/push the exact green commit to Artifact Registry.
+12. Configure private service identities, OPA/OpenFGA and explicit Cloud Run invokers.
+13. Configure model gateway/local model adapters and OpenTelemetry exporter.
+14. Enable runtime only after database/schema/IAM/readiness/policy checks succeed.
+15. Run project adapter contracts, model fallback, privacy/MCP adversarial tests, sandbox tests and the selected durable engine's crash/idempotency suite.
+16. Run Promptfoo live regression/red-team.
+17. Run Ragas only if RAG is enabled.
+18. Verify OpenTelemetry trace correlation; add Langfuse if selected as the observability UI/backend.
+19. Exercise backup restore and rollback before production status is allowed.
 
 ## Rollback
 
