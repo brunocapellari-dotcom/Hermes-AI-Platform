@@ -6,7 +6,7 @@ Last architecture review: 2026-09-22.
 
 | Responsibility | Decision | Tool | Canonical Hermes owner | Rationale |
 |---|---|---|---|---|
-| model/provider gateway | ADOPT | LiteLLM | ModelGateway | provider abstraction remains behind Hermes contract; no second gateway by default |
+| model/provider gateway | ADOPT | LiteLLM 1.101.x | ModelGateway | mature active multi-provider gateway; non-enterprise core MIT; Hermes contract remains the boundary |
 | agent capability library | ADOPT PATTERN / BENCHMARK | Pydantic AI v2.47.0 + official Harness | Agent/Skill Factory + Context/Tool/Security layers | selectively reuse mature capability contracts while Hermes keeps authority/state ownership |
 | durable execution | BENCHMARK | DBOS 2.31.x / 3.x migration track | Hermes Durable Engine | current implementation candidate; must pass neutral crash/idempotency/version benchmark |
 | durable execution | BENCHMARK | Temporal Python SDK | Hermes Durable Engine | mature replay/versioning and multi-language control plane; operational overhead must be measured |
@@ -30,7 +30,10 @@ Last architecture review: 2026-09-22.
 | OS-level code sandbox | BENCHMARK | E2B | Hermes Sandbox Service | Apache-2.0, active, GCP self-host/BYOC and isolated sandboxes; benchmark against nsjail |
 | lightweight OS sandbox | BENCHMARK | nsjail 3.6 | Hermes Sandbox Service | Linux namespaces/cgroups/seccomp option for controlled hosts |
 | abandoned sandbox | REJECT | Daytona OSS | Hermes Sandbox Service | repository explicitly unmaintained since June 2026 |
-| alternate model gateway | BENCHMARK | Bifrost / agentgateway | ModelGateway | consider only if measured benefits exceed migration and security cost |
+| alternate model gateway | BENCHMARK | Bifrost 1.7.x | ModelGateway | Apache-2.0 high-performance candidate; replace LiteLLM only after the canonical gateway benchmark shows net advantage |
+| agentic LLM/MCP/A2A data plane | BENCHMARK | agentgateway 1.5.x | Hermes Agentic Data Plane | Linux Foundation Apache-2.0 candidate for consolidation; not a second default model gateway and cannot replace Hermes policy authority |
+| archived LLMOps gateway | REJECT | TensorZero | ModelGateway | upstream archived in June 2026; do not add archived runtime dependencies |
+| redundant LLM observability gateway | REJECT | Helicone | Hermes OTel | overlaps the selected OpenTelemetry + Langfuse stack without a distinct required failure mode |
 | legacy prompt guard | REJECT | ProtectAI LLM Guard | Hermes Security | upstream archived; do not add an archived core dependency |
 
 ## Pydantic AI Harness adoption rule
@@ -54,6 +57,12 @@ Explicitly non-canonical:
 - Harness Step Persistence cannot become a second durable state store.
 - Dynamic Workflow cannot bypass Hermes mission state, policy or durable execution.
 
+## Model gateway selection rule
+
+LiteLLM is the current canonical gateway adapter target. Bifrost is the only direct replacement benchmark. Both must run the same fixtures in src/hermes/model_gateway_benchmark.py for provider compatibility, fallback/retry, streaming, structured output, tool metadata, multimodal routes, service authentication, usage/cache accounting, OpenTelemetry, overload/backpressure, latency overhead and failure isolation.
+
+Agentgateway is evaluated for a different question: whether one agentic data plane can simplify LLM + MCP + A2A connectivity without duplicating Hermes authorization, registries and observability. It is not promoted merely because it can proxy LLM traffic.
+
 ## Durable execution selection rule
 
 No durable engine is selected merely because an implementation already exists. DBOS, Temporal and Restate must execute the same scenarios from src/hermes/durable_benchmark.py.
@@ -66,7 +75,7 @@ DBOS remains the current reference implementation in the branch only because it 
 
 Hermes keeps one canonical MCP control boundary. ToolHive and ContextForge are benchmark inputs/components.
 
-From ToolHive, Hermes directly adopts the useful concepts of deny-by-default runtime permissions and artifact provenance in MCPWorkloadPolicy. ToolHive runtime itself must pass security-advisory regressions before production promotion.
+From ToolHive, Hermes directly adopts the useful concepts of deny-by-default runtime permissions and artifact provenance in MCPWorkloadPolicy. ToolHive runtime itself must pass security-advisory regressions before production promotion. Agentgateway is evaluated separately as a broader agentic data plane because it spans LLM, MCP and A2A traffic; it must not create a parallel policy/registry authority.
 
 ContextForge is evaluated for federation, A2A and plugin-hook semantics. Its registry, RBAC and policy capabilities must not duplicate Hermes Registry + OPA + OpenFGA unless a benchmark demonstrates a missing requirement that cannot be supplied through a smaller adapter.
 
