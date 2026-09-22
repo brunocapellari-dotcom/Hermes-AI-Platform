@@ -31,9 +31,12 @@ def test_harness_audit_covers_priority_capabilities_without_framework_takeover()
         "SubAgents",
         "Dynamic Workflow",
         "Advisor",
+        "Code Mode",
         "Tool Search",
         "Compaction",
         "Tool Output Limits",
+        "Warn On Cache Busts",
+        "System Reminders",
         "Playwright Browser",
         "Browser Use",
         "Guardrails",
@@ -117,7 +120,12 @@ def test_platform_component_policy_prevents_duplicate_framework_ownership() -> N
     } == {AdoptionDecision.BENCHMARK}
     assert by_name["ToolHive"].canonical_owner == "HERMES_MCP_GATEWAY"
     assert by_name["IBM ContextForge"].canonical_owner == "HERMES_MCP_GATEWAY"
-    assert by_name["Arize Phoenix"].canonical_owner == "HERMES_OTEL"
+    assert by_name["Langfuse"].decision == AdoptionDecision.ADOPT
+    assert by_name["Langfuse"].canonical_owner == "HERMES_OTEL"
+    assert by_name["Arize Phoenix"].decision == AdoptionDecision.RESERVE
+    assert by_name["Pydantic Monty"].decision == AdoptionDecision.BENCHMARK
+    assert by_name["Daytona OSS"].decision == AdoptionDecision.REJECT
+    assert by_name["Prefect"].decision == AdoptionDecision.RESERVE
     assert by_name["Promptfoo"].decision == AdoptionDecision.ADOPT
     assert by_name["DeepEval"].decision == AdoptionDecision.RESERVE
     assert by_name["Ragas"].decision == AdoptionDecision.ADOPT
