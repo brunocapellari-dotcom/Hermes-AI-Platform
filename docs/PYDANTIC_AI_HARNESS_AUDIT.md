@@ -1,111 +1,107 @@
-# Pydantic AI Harness audit for Hermes
+# Pydantic AI / official Harness audit for Hermes
 
-Date: 2026-09-21
-Reference version reviewed: Pydantic AI Harness 0.32.x.
+Date: 2026-09-22
+Reference reviewed: Pydantic AI v2.47.0 and its official Harness capability catalog.
 
 ## Decision
 
-Pydantic AI Harness is useful as a decomposable capability/reference library. It does not replace Hermes orchestration, state, policy, knowledge, registry, agent factory, skill factory, model routing or durable execution.
+Pydantic AI and its Harness are high-value component/reference libraries. They do not replace Hermes orchestration, mission state, policy, knowledge, registry, model routing, durable-engine selection or project authority.
 
-The package is still on 0.x versioning. Production adoption is therefore capability-by-capability and behind Hermes contracts.
+Hermes adopts useful semantics behind Hermes-owned contracts. Direct dependencies are added only when the upstream implementation is complex enough to justify the supply-chain/runtime cost.
 
 ## Capability matrix
 
-| Capability | Hermes decision | Canonical owner | Integration rule |
+| Capability | Hermes decision | Canonical owner | Current Hermes treatment |
 |---|---|---|---|
-| Coder | ADOPT PATTERN | Agent Factory + Tool Gateway | never use unrestricted host shell in production; compose safer internal coder |
-| Researcher | ADOPT PATTERN | Research AI | reuse bounded output/delegation; do not duplicate Research AI |
-| FileSystem | ADOPT PATTERN | Tool Gateway | workspace root, protected paths, audited writes |
-| Shell | ADOPT PATTERN | Tool Gateway | sandbox, explicit commands, timeout, credential stripping, approval |
-| RepoContext | ADOPT PATTERN | Context Router | load repository guidance and structure on demand |
-| Memory | REJECT AS CANONICAL | Second Brain | scratch/session cache only; no second truth store |
-| Conversation Search | RESERVE | Context Router | use only when indexed conversation history materially improves retrieval |
-| Skills | ADOPT PATTERN | Skill Factory/Registry | progressive disclosure and SKILL.md compatibility through Hermes governance |
-| Planning | ADOPT PATTERN | Task DAG Planner | model proposes; Hermes validates and persists authoritative DAG |
-| SubAgents | ADOPT PATTERN | Agent Router/Factory | registry-backed, bounded permissions, own lifecycle only when justified |
-| Dynamic Workflow | BENCHMARK | Task DAG Planner | bounded fan-out/chain/vote; cannot bypass mission/durable state |
-| Advisor | ADOPT PATTERN | Review Panel/Model Router | escalate selected decisions to stronger model without creating another agent class |
-| Tool Search | ADOPT PATTERN | Tool Registry | lazy tool discovery to reduce prompt/tool schema load |
-| Compaction | ADOPT PATTERN | Context Router | compressed context is derived state, never canonical memory |
-| Tool Output Limits | ADOPT PATTERN | Tool Gateway | cap/truncate/spill/summarize before model ingestion |
-| Playwright Browser | RESERVE | Research AI | deterministic browser automation for research/test workflows |
-| Browser Use | RESERVE | Research AI | autonomous browser only with sandbox, policy and approval |
-| Guardrails | ADOPT PATTERN | Security/Privacy | validators complement OPA/OpenFGA; never become authority |
-| Prompt Injection Defender | BENCHMARK | Security | detector signal only; classifier cannot grant permission |
-| Spend Limits | ADOPT PATTERN | Budget Guard | integrate with Hermes persistent usage/cost ledger |
-| Tool Approval | ADOPT PATTERN | Policy Engine | map deferred calls to owner-approval boundary |
-| Trajectory Judge | BENCHMARK | Evaluation | test long-run steering benefit, false positives, cost and latency |
-| Capability Creation | BENCHMARK RESTRICTED | Agent/Skill Factory | generated capability enters sandbox only; no self-registration to production |
-| Step Persistence | REJECT AS CANONICAL | Durable Engine | avoid duplicate checkpoints/workflow state |
-| OpenTelemetry instrumentation | ADOPT | Hermes OTel | standard trace/metric propagation |
+| Coder | ADOPT PATTERN | Agent Factory + Tool/Sandbox boundary | decomposed; WorkspaceFileSystem and sandbox executor contract implemented |
+| Researcher | ADOPT PATTERN | Research AI | bounded/delegated research patterns only |
+| FileSystem | ADOPT PATTERN | Tool Gateway | root confinement, protected paths, symlink/traversal protection, atomic hash-aware writes implemented |
+| Shell | ADOPT PATTERN | Tool/Sandbox boundary | explicit allowlist/policy and SandboxExecutor contract; no host subprocess fallback |
+| Repo Context | ADOPT PATTERN | Context Router | repository guidance remains derived run context, not memory |
+| Memory | REJECT AS CANONICAL | Second Brain | no second canonical memory store |
+| Conversation Search | RESERVE | Context Router | only when persisted conversation retrieval has measured value |
+| Skills | ADOPT PATTERN | Skill Factory/Registry | progressive disclosure compatible with Hermes-governed skill lifecycle |
+| Planning | ADOPT PATTERN | Task DAG Planner | model may propose; Hermes validates/persists DAG |
+| SubAgents | ADOPT PATTERN | Agent Router/Factory | registry-backed, least privilege and bounded delegation |
+| Dynamic Workflow | BENCHMARK | Task DAG Planner | cannot bypass durable mission state or child-call budgets |
+| Advisor | ADOPT PATTERN | Review Panel/Model Router | stronger-model consultation without separate authority |
+| Code Mode | BENCHMARK | Tool Orchestration | vendor-neutral CodeModeService implemented; Monty is current runtime candidate |
+| Tool Search | ADOPT PATTERN | Tool Registry | native lazy tool search implemented |
+| Compaction | ADOPT PATTERN | Context Router | transparent deterministic compaction implemented; canonical evidence unchanged |
+| Tool Output Limits | ADOPT PATTERN | Tool Gateway | native result bounding implemented |
+| Warn On Cache Busts | ADOPT PATTERN | Context/FinOps | provider cache-token accounting and cache-efficiency diagnostics implemented |
+| System Reminders | ADOPT PATTERN | Context Router | reserve for long-run instruction reinforcement; no policy authority |
+| Browser capabilities | RESERVE | Research AI | browser execution remains isolated from Hermes core |
+| Guardrails | ADOPT PATTERN | Security/Privacy | supplemental validators only; deterministic policy remains authority |
+| Prompt Injection Defender | BENCHMARK | Security | signal only, never authorization |
+| Spend Limits | ADOPT PATTERN | Budget Guard | persistent daily/weekly/monthly limits implemented |
+| Tool Approval | ADOPT PATTERN | Policy Engine | persistent TTL, payload-hash-bound, one-time approval implemented |
+| Trajectory Judge | BENCHMARK | Evaluation | require measured long-run benefit before promotion |
+| Capability Creation | BENCHMARK RESTRICTED | Agent/Skill Factory | proposal only; sandbox/tests/benchmark/security/independent audit required |
+| Step Persistence | REJECT AS CANONICAL | Durable Engine | would duplicate durable workflow state |
+| OpenTelemetry | ADOPT | Hermes OTel | canonical distributed telemetry |
 
-## Coder decomposition
+## Coder boundary
 
-The full Coder harness is not production-safe as-is for Hermes because its documented default shell composition is unrestricted on the host. Hermes will construct a safer internal coding capability from:
+The current official Harness itself has materially improved FileSystem/Shell controls: traversal/symlink safety, allow/deny execution controls, timeouts and credential stripping. Hermes still does not import the complete Coder as its production authority because authorization, approvals, durable state and repository lifecycle must remain Hermes-owned.
 
-1. repository-scoped file access;
-2. protected secret/repository metadata paths;
-3. content/hash-aware edits where practical;
-4. allowlisted or sandboxed command execution;
-5. process timeout and output bounds;
-6. credential stripping;
-7. egress policy;
-8. Tool Gateway authorization and audit;
-9. explicit approval for high-risk writes;
-10. deterministic tests before any promotion.
+Hermes Coder execution is split into two security levels:
 
-This makes the useful behavior portable without making Pydantic AI Harness the security boundary.
+1. **Restricted orchestration code** — Code Mode runtime such as Monty. Model-written Python has no filesystem, environment or network unless explicitly bridged. Any external tool call must traverse Hermes ToolGateway.
+2. **OS-level coding work** — separate SandboxExecutor service such as E2B or nsjail after the sandbox benchmark. It never runs untrusted code inside the Hermes API process.
+
+The host shell is never a production fallback.
+
+## Code Mode / Monty
+
+Pydantic Monty is a distinct candidate from an OS sandbox. It is a Rust Python interpreter designed for AI-written code, with no filesystem/network/environment by default and built-in resource limits/snapshots.
+
+Hermes has implemented a vendor-neutral CodeModeRuntime contract. A runtime may invoke only request-allowlisted tool IDs, with a hard call budget, and every invocation still passes through ToolGateway policy, approval, rate limit and timeout.
+
+Monty remains BENCHMARK until its current v1 beta line and Hermes integration pass deterministic security/performance tests. It cannot replace E2B/nsjail for arbitrary repository builds or system tooling.
 
 ## Researcher decomposition
 
-Research AI remains the shared research service. Useful patterns to absorb are:
-
-- bounded page/tool output;
-- sub-question delegation;
-- context-efficient tool discovery;
-- citation/evidence handoff;
-- hard maximum child-agent calls;
-- isolation of research findings from authoritative knowledge until Knowledge Factory validation.
+Research AI remains the shared research service. Useful upstream patterns are bounded output, sub-question delegation, lazy capability/tool loading, citation/evidence handoff and hard child-agent limits. Research findings remain non-canonical until Knowledge Factory/Second Brain validation.
 
 ## Context controls
 
-Hermes should implement or adapt the following capability semantics centrally:
+Hermes now implements:
+- lazy tool search;
+- output bounds;
+- policy-filtered deterministic context compaction;
+- prompt-cache efficiency accounting;
+- repository/workspace context boundaries.
 
-- lazy tool loading;
-- tool output limits;
-- context compaction;
-- conversation/history retrieval when available;
-- repository context;
-- cache-safe reminders only where necessary.
+Compacted content is derived context and may never overwrite source evidence or Second Brain claims. LLM-generated summaries may be evaluated later but are not required for canonical compaction.
 
-All compacted/summarized content is derived context. It may never overwrite evidence, source documents or canonical Second Brain claims.
+## Safety and approvals
 
-## Safety controls
+The authority chain remains:
 
-Harness Guardrails and Prompt Injection Defender can supply signals, but the authority chain remains:
+authenticated identity -> Hermes policy -> OPA/OpenFGA -> optional one-time approval -> scoped credential -> tool/project action -> audit.
 
-identity -> Hermes policy -> OPA/OpenFGA -> scoped credentials -> tool/project action -> audit.
-
-Spend limits never override hard policy. Tool approvals never grant rights outside the caller's maximum authorization envelope.
+Approval is not permission escalation. A hard policy denial cannot be converted into an allowed action merely by obtaining an approval. Approval records store payload hashes, not raw sensitive payloads, and are one-time/TTL-bound.
 
 ## Self-extension
 
 Capability Creation is allowed only as a proposal mechanism:
 
-need -> typed specification -> least-privilege permissions -> sandbox -> deterministic tests -> benchmark -> security/adversarial tests -> independent auditor -> registry.
+need -> typed spec -> least privilege -> sandbox -> deterministic tests -> benchmark -> adversarial/security tests -> independent auditor -> registry.
 
-The creating agent cannot approve its own capability, expand its own scopes or deploy production code.
+The creator cannot approve its own capability, self-grant scopes, or directly deploy production code.
 
 ## Durability
 
-Harness Step Persistence is not used as the production source of workflow state. Durable execution is selected separately through the DBOS/Temporal/Restate benchmark. This avoids split recovery state and inconsistent checkpoints.
+Harness Step Persistence is not production workflow truth. DBOS, Temporal and Restate remain the canonical durable-engine benchmark candidates. Pydantic AI's additional integrations such as Prefect are RESERVE unless the three-candidate benchmark reveals an unmet requirement.
 
 ## Dependency policy
 
-Do not add pydantic-ai-harness to Hermes core dependencies merely to gain one capability. Prefer:
+Do not add Pydantic AI/Harness/Monty merely to obtain behavior that Hermes can implement safely in a small stable contract.
 
-- internal implementation when small and stable;
-- a narrow optional adapter when the upstream capability is complex and useful;
-- no dependency when Hermes already owns the responsibility.
-
-Any direct Harness dependency must be version-pinned, supply-chain scanned and accompanied by a regression test for the exact capability being used.
+Direct adoption requires:
+- a capability whose implementation complexity justifies the dependency;
+- a pinned/locked version;
+- supply-chain/license review;
+- deterministic regression coverage;
+- no duplicate canonical state or authority.
