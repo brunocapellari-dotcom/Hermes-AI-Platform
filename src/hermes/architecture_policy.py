@@ -262,6 +262,44 @@ def validate_component_matrix(
 
 PLATFORM_COMPONENT_DECISIONS: tuple[ComponentDecision, ...] = (
     ComponentDecision(
+        component="LiteLLM",
+        responsibility="multi-provider model gateway",
+        decision=AdoptionDecision.ADOPT,
+        canonical_owner="HERMES_MODEL_GATEWAY",
+        rationale="mature active gateway with broad provider coverage, OpenAI-compatible interface, Rust core, and MIT-licensed non-enterprise core",
+        constraints=["Hermes ModelGateway contract remains authoritative", "do not depend on enterprise-only control-plane features"],
+    ),
+    ComponentDecision(
+        component="Bifrost",
+        responsibility="high-performance multi-provider model gateway",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_MODEL_GATEWAY",
+        rationale="active Apache-2.0 gateway with strong performance claims, semantic caching and governance; benchmark before replacing LiteLLM",
+        constraints=["same provider/model fixture", "measure p50/p95 overhead", "no parallel production gateway"],
+    ),
+    ComponentDecision(
+        component="agentgateway",
+        responsibility="agentic LLM MCP and A2A data plane",
+        decision=AdoptionDecision.BENCHMARK,
+        canonical_owner="HERMES_AGENTIC_DATAPLANE",
+        rationale="Linux Foundation Apache-2.0 project combines LLM, MCP and A2A routing with RBAC, OTel and inference routing",
+        constraints=["security benchmark required", "must not duplicate Hermes OPA/OpenFGA authority", "promote only if consolidation value is measurable"],
+    ),
+    ComponentDecision(
+        component="TensorZero",
+        responsibility="LLMOps gateway observability optimization",
+        decision=AdoptionDecision.REJECT,
+        canonical_owner="HERMES_MODEL_GATEWAY",
+        rationale="upstream repository is archived; do not introduce an archived core runtime dependency",
+    ),
+    ComponentDecision(
+        component="Helicone",
+        responsibility="LLM observability gateway",
+        decision=AdoptionDecision.REJECT,
+        canonical_owner="HERMES_OTEL",
+        rationale="observability responsibility is already covered by OpenTelemetry plus Langfuse; adding Helicone would duplicate the stack",
+    ),
+    ComponentDecision(
         component="DBOS",
         responsibility="durable execution",
         decision=AdoptionDecision.BENCHMARK,
