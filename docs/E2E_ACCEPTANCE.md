@@ -20,7 +20,7 @@ The final gate must run the entire enabled surface in one release candidate. Rep
 
 10. Tool Search returns only relevant registered tools and does not expand authorization.
 11. Tool Output Limits bound oversized results without changing source-of-truth artifacts.
-12. Context compaction, if later enabled, preserves source references and remains derived state.
+12. Context compaction preserves source references, privacy filtering and derived-state semantics; cache-efficiency accounting reconciles provider-reported cached input tokens.
 13. Pydantic AI Harness capability adoption matches the executable architecture matrix; Harness Memory and Step Persistence never become canonical stores.
 14. Any generated capability enters only through sandbox -> deterministic tests -> benchmark -> security/adversarial tests -> independent audit -> registry.
 
@@ -62,19 +62,22 @@ The final gate must run the entire enabled surface in one release candidate. Rep
 ## Observability and FinOps acceptance
 
 31. OpenTelemetry correlates Hermes mission -> durable workflow -> durable step -> model/tool/project call -> failure/recovery.
-32. Phoenix consumes OpenTelemetry traces as the preferred optional AI-observability backend and can be removed without changing Hermes operational correctness.
-33. Phoenix is not mission state, authorization state, registry state or FinOps source of truth.
+32. Langfuse consumes OpenTelemetry traces as the preferred optional AI-observability backend and can be removed without changing Hermes operational correctness.
+33. Langfuse is not mission state, authorization state, registry state or FinOps source of truth; Phoenix remains reserve only.
 34. PostgreSQL audit/usage records reconcile with exported telemetry for sampled test missions.
 35. BigQuery, when enabled, remains analytical only.
+36. LiteLLM and Bifrost can be tested against the same model-gateway scenarios; a replacement requires full scenario pass plus measured advantage.
+37. Code Mode runtimes cannot invoke a tool outside the request allowlist or bypass ToolGateway policy/approval/rate limits.
+38. Any OS-level Coder sandbox passes filesystem, credential, metadata/SSRF, egress, resource, escape, provenance, cleanup, telemetry and cross-sandbox isolation tests.
 
 ## Production/GCP acceptance
 
-36. Repository CI is fully green on the exact release commit: lint, strict typing, security scan, dependency audit, migration, coverage >=90%, policy validation, supply-chain scans, container build and Terraform validation.
-37. GCP deploy uses the exact green immutable artifact.
-38. Cloud SQL IAM authentication, migrations, runtime grants and private networking pass.
-39. OPA/OpenFGA identities, policies and relationship tuples pass live positive and negative authorization tests.
-40. Every canonical project passes its declared adapter contract and authorized execute/idempotency tests where applicable.
-41. Live model/provider fallback, privacy, MCP adversarial and durable recovery tests pass.
-42. Backup restore and runtime/schema rollback procedures are exercised.
+39. Repository CI is fully green on the exact release commit: lint, strict typing, security scan, dependency audit, migration, coverage >=90%, policy validation, supply-chain scans, container build and Terraform validation.
+40. GCP deploy uses the exact green immutable artifact.
+41. Cloud SQL IAM authentication, migrations, runtime grants and private networking pass.
+42. OPA/OpenFGA identities, policies and relationship tuples pass live positive and negative authorization tests.
+43. Every canonical project passes its declared adapter contract and authorized execute/idempotency tests where applicable.
+44. Live model/provider fallback, privacy, MCP adversarial and durable recovery tests pass.
+45. Backup restore and runtime/schema rollback procedures are exercised.
 
 CI tests the repository-contained surface on every change. Live external integrations remain BLOCKED, not PASSED, until credentials/endpoints and real services are available. A documentation claim cannot override failing or missing evidence.
