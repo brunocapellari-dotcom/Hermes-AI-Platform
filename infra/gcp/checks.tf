@@ -4,9 +4,12 @@ check "immutable_release_identity" {
       var.runtime_enabled ||
       var.migration_job_enabled ||
       var.dbos_reference_enabled
-    ) || length(trimspace(var.release_version)) >= 7
+    ) || (
+      length(trimspace(var.release_version)) >= 7 &&
+      can(regex("^[0-9a-f]{64}$", lower(var.dependency_lock_sha256)))
+    )
 
-    error_message = "release_version must identify the exact immutable release/commit before runtime, migration, or DBOS benchmark resources are enabled."
+    error_message = "release_version and dependency_lock_sha256 must identify the exact immutable release and generated dependency lock before runtime, migration, or DBOS benchmark resources are enabled."
   }
 }
 
