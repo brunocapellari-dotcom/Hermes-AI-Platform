@@ -1,0 +1,78 @@
+steps:
+  - id: build-ci-toolchain
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "--pull", "-f", "Dockerfile.cloudbuild", "-t", "hermes-ci:${BUILD_ID}", "."]
+
+  - id: full-platform-gate
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm \
+          -v /workspace:/workspace \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -w /workspace hermes-ci:${BUILD_ID} bash -ceu '
+            ruff check .
+            mypy src
+            bandit -q -r src
+            pip-audit
+            HERMES_DATABASE_URL=sqlite:////tmp/hermes-migration.db alembic upgrade head
+            pytest
+
+            curl -fsSLo /tmp/opa https://github.com/open-policy-agent/opa/releases/download/v1.20.2/opa_linux_amd64
+            echo "ed3127751a4c786eb407d26a952c92f45fdcc4b97e0af25cd5d721a414fab244  /tmp/opa" | sha256sum -c -
+            chmod +x /tmp/opa
+            /tmp/opa check --strict policy/opa
+            /tmp/opa test policy/opa --verbose
+
+            curl -fsSLo /tmp/fga.tar.gz https://github.com/openfga/cli/releases/download/v0.8.0/fga_0.8.0_linux_amd64.tar.gz
+            echo "9393d915a1c2eef92986a53824be112ff918e4fe844e33dc6b45b0d3a902275a  /tmp/fga.tar.gz" | sha256sum -c -
+            tar -xzf /tmp/fga.tar.gz -C /tmp
+            /tmp/fga model validate --file policy/openfga/model.fga
+
+            zizmor --pedantic .github/workflows/
+            docker run --rm -v /workspace:/repo ghcr.io/gitleaks/gitleaks:v8.30.1 \
+              dir /repo --redact --no-banner
+            docker run --rm -v /workspace:/workspace aquasec/trivy:0.74.0 \
+              config --severity HIGH,CRITICAL --exit-code 1 /workspace
+
+            docker build --pull -t hermes-ai-platform:ci .
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v /workspace:/workspace anchore/syft:v1.52.0 \
+              hermes-ai-platform:ci -o cyclonedx-json=/workspace/sbom.cdx.json
+            python - <<"PY"
+            import json
+            from pathlib import Path
+            data = json.loads(Path("sbom.cdx.json").read_text())
+            assert data.get("bomFormat") == "CycloneDX"
+            assert data.get("components")
+            PY
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.74.0 \
+              image --severity HIGH,CRITICAL --exit-code 1 hermes-ai-platform:ci
+
+            docker run --rm -v /workspace:/workspace -w /workspace/infra/gcp \
+              hashicorp/terraform:1.16.3 fmt -check -recursive
+            docker run --rm -v /workspace:/workspace -w /workspace/infra/gcp \
+              hashicorp/terraform:1.16.3 init -backend=false
+            docker run --rm -v /workspace:/workspace -w /workspace/infra/gcp \
+              hashicorp/terraform:1.16.3 validate
+
+            printf "FULL_PROJECT_GATE_OK\n" > /workspace/cloudbuild-gate-summary.txt
+          '
+
+  - id: persist-evidence
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        printf '%s\n' "${COMMIT_SHA}" > /workspace/source-commit.txt
+        gcloud storage cp /workspace/cloudbuild-gate-summary.txt /workspace/source-commit.txt /workspace/sbom.cdx.json \
+          "gs://${PROJECT_ID}-ai-execution-evidence/Hermes-AI-Platform/${BUILD_ID}/"
+
+timeout: 7200s
+serviceAccount: "projects/${PROJECT_ID}/serviceAccounts/ai-build-executor@${PROJECT_ID}.iam.gserviceaccount.com"
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
