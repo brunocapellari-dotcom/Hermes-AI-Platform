@@ -48,6 +48,15 @@ class ContextAssembly(BaseModel):
     provenance: dict[str, ContextProvenance]
 
 
+class ContextBudget(BaseModel):
+    max_tokens: int = Field(default=8_000, ge=128, le=2_000_000)
+    chars_per_token: float = Field(default=4.0, ge=1.0, le=12.0)
+
+    @property
+    def max_chars(self) -> int:
+        return max(512, int(self.max_tokens * self.chars_per_token))
+
+
 class ContextFabric:
     def __init__(
         self,
@@ -64,9 +73,13 @@ class ContextFabric:
         *,
         target_project: str,
         tenant: str = "owner",
-        max_chars: int = 32_000,
+        max_chars: int | None = None,
+        budget: ContextBudget | None = None,
         pinned_sources: set[str] | None = None,
     ) -> ContextAssembly:
+        if max_chars is not None and budget is not None:
+            raise ValueError("provide max_chars or budget, not both")
+        effective_max_chars = max_chars if max_chars is not None else (budget or ContextBudget()).max_chars
         allowed = [
             fragment
             for fragment in fragments
@@ -85,7 +98,7 @@ class ContextFabric:
         )
         compaction = self.compactor.compact(
             [fragment.item for fragment in ordered],
-            max_chars=max_chars,
+            max_chars=effective_max_chars,
             pinned_sources=pinned_sources,
         )
         retained_sources = {item.source for item in compaction.items}
