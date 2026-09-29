@@ -10,6 +10,7 @@ import httpx
 from dbos import DBOS, DBOSConfig, SetWorkflowID
 
 from hermes.auth import outbound_service_auth_enabled, service_identity_headers
+from hermes.autonomy import AutonomyMatrix, CapabilityAutonomyPolicy
 from hermes.authorization import build_policy_engine
 from hermes.cloud_sql import close_cloud_sql_resources, cloud_sql_engine, is_cloud_sql_iam_url
 from hermes.domain import Mission, MissionStatus, PolicyRequest, TaskNode, TaskStatus
@@ -109,6 +110,28 @@ def execute_project_task_step(
         return {"status": "blocked", "reason": "project execute capability is not authorized"}
     if task.risk.value in {"high", "critical"} and task.action_type.mutating:
         return {"status": "blocked", "reason": "high-risk mutation requires owner approval"}
+    autonomy_payload = item.payload.get("autonomy")
+    if isinstance(autonomy_payload, list) and autonomy_payload:
+        try:
+            matrix = AutonomyMatrix(
+                [CapabilityAutonomyPolicy.model_validate(policy) for policy in autonomy_payload]
+            )
+        except ValueError:
+            return {"status": "blocked", "reason": "project autonomy policy is invalid"}
+        autonomy = matrix.evaluate(
+            project=task.project,
+            capability=task.capability,
+            action=task.action_type,
+            risk=task.risk,
+            external_write=task.action_type.mutating,
+        )
+        if not autonomy.allowed:
+            return {"status": "blocked", "reason": autonomy.reason}
+    elif task.action_type.mutating:
+        return {
+            "status": "blocked",
+            "reason": "mutating capability has no explicit autonomy policy",
+        }
     relation = "can_execute" if task.action_type.mutating else "can_query"
     decision = _policy().authorize(
         PolicyRequest(
