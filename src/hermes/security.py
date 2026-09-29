@@ -111,8 +111,14 @@ class ToolGateway:
         payload: Mapping[str, Any],
         trust: TrustLevel = TrustLevel.TRUSTED,
         approval_id: str | None = None,
+        project: str | None = None,
+        authorized_tools: set[str] | None = None,
     ) -> Mapping[str, Any]:
+        if authorized_tools is not None and tool_id not in authorized_tools:
+            raise PermissionError("tool is not in the caller allowlist")
         spec, handler = self._tools[tool_id]
+        if spec.project is not None and project != spec.project:
+            raise PermissionError("tool is outside the caller project scope")
         decision = self.policy.authorize(
             PolicyRequest(
                 actor=actor,
