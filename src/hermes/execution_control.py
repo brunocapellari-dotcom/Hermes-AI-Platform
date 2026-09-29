@@ -220,6 +220,7 @@ class ToolExecutionCoordinator:
                         payload=request.payload,
                         trust=trust,
                         approval_id=request.approval_id,
+                        project=request.project,
                     ),
                     timeout=request.timeout_seconds,
                 )
