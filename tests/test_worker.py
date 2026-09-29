@@ -197,3 +197,33 @@ def test_dbos_runtime_rejects_invalid_otlp_endpoint(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="HTTP"):
         _dbos_runtime_config("postgresql://example")
+
+
+def test_worker_enforces_capability_autonomy_for_low_risk_mutation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    db, mission, task = setup_mission(tmp_path, monkeypatch, action=ActionType.CREATE)
+    SqlRegistry(db).upsert(
+        RegistryKind.PROJECT,
+        "PROJECT",
+        {
+            "base_url": "https://project.test",
+            "capabilities": ["cap"],
+            "allow_execute": True,
+            "autonomy": [
+                {
+                    "project": "PROJECT",
+                    "capability": "cap",
+                    "level": 2,
+                    "allowed_actions": ["query", "analyze", "create"],
+                    "max_risk": "medium",
+                    "external_writes": True,
+                }
+            ],
+        },
+    )
+    result = execute_project_task_step.__wrapped__(  # type: ignore[attr-defined]
+        mission.mission_id, mission.goal, task.model_dump(mode="json")
+    )
+    assert result["status"] == "blocked"
+    assert "A3" in result["reason"]
