@@ -43,10 +43,7 @@ CANONICAL_PROJECTS: dict[str, ProjectContract] = {
         required_endpoints=("/health", "/v1/status", "/v1/capabilities", "/v1/research"),
         execute_optional=True,
     ),
-    "AGROLOG_MT": ProjectContract(
-        key="AGROLOG_MT",
-        capabilities={"freight_analysis", "crop_analysis", "weather_analysis", "maritime_analysis"},
-    ),
+    "AGROLOG_MT": ProjectContract(key="AGROLOG_MT", capabilities={"freight_analysis"}),
     "MERCADO_FINANCEIRO": ProjectContract(
         key="MERCADO_FINANCEIRO", capabilities={"financial_analysis"}
     ),
