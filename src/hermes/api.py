@@ -23,6 +23,7 @@ from hermes.cloud_sql import close_cloud_sql_resources
 from hermes.cognitive import HybridIntentEngine, TaskGraphPlanner
 from hermes.config import Settings, get_settings
 from hermes.context import ContextCompactor, ContextItem, ContextRouter
+from hermes.context_fabric import ContextFabric, ContextFragment
 from hermes.contracts import DurableDispatcher
 from hermes.control_center import ControlCenter
 from hermes.decision import HypothesisEngine, ScenarioEngine, ScenarioOption
@@ -41,6 +42,8 @@ from hermes.multimodal import OpenAICompatibleMultimodal
 from hermes.orchestrator import HermesOrchestrator
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.privacy import SensitiveDataGuard
+from hermes.project_registry import ProjectRegistration, ProjectRegistry
+from hermes.readiness import ReadinessEvidence, evaluate_final_readiness
 from hermes.recovery import FailureRecoveryEngine
 from hermes.release_integrity import release_integrity
 from hermes.registry import PersistentModelRegistry, RegistryKind, SqlRegistry
@@ -103,6 +106,19 @@ class ContextSelect(BaseModel):
 class ContextCompact(ContextSelect):
     max_chars: int = Field(default=32_000, ge=512, le=1_000_000)
     pinned_sources: set[str] = Field(default_factory=set)
+
+
+class ContextAssemble(BaseModel):
+    fragments: list[ContextFragment]
+    target_project: str
+    tenant: str = "owner"
+    max_chars: int = Field(default=32_000, ge=512, le=1_000_000)
+    pinned_sources: set[str] = Field(default_factory=set)
+
+
+class FinalReadinessRequest(BaseModel):
+    commit_sha: str = Field(min_length=7, max_length=64)
+    evidence: list[ReadinessEvidence] = Field(default_factory=list)
 
 
 class GenerateRequest(BaseModel):
@@ -264,6 +280,8 @@ class AppContainer:
         )
         self.context = ContextRouter()
         self.compactor = ContextCompactor()
+        self.context_fabric = ContextFabric(router=self.context, compactor=self.compactor)
+        self.projects = ProjectRegistry(self.registry)
         self.scenarios = ScenarioEngine()
         self.hypotheses = HypothesisEngine()
         self.improvements = PersistentImprovementEngine(self.registry)
@@ -320,6 +338,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             dependency_lock_sha256=settings.dependency_lock_sha256,
         ).model_dump(mode="json")
 
+    @api.post("/v1/final-readiness/evaluate")
+    def final_readiness(payload: FinalReadinessRequest) -> dict[str, Any]:
+        return evaluate_final_readiness(
+            commit_sha=payload.commit_sha,
+            evidence=payload.evidence,
+        ).model_dump(mode="json")
+
     @api.get("/v1/capabilities")
     def capabilities() -> dict[str, Any]:
         return {
@@ -330,6 +355,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "model_performance_learning",
                 "context_routing",
                 "context_compaction",
+                "context_fabric",
+                "capability_autonomy",
+                "project_registry",
+                "final_readiness_gate",
                 "privacy_guard",
                 "mcp_admission",
                 "deliberation",
@@ -644,6 +673,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return result.model_dump(mode="json")
 
+    @api.post("/v1/context/assemble")
+    def context_assemble(payload: ContextAssemble) -> dict[str, Any]:
+        result = container.context_fabric.assemble(
+            payload.fragments,
+            target_project=payload.target_project,
+            tenant=payload.tenant,
+            max_chars=payload.max_chars,
+            pinned_sources=payload.pinned_sources,
+        )
+        return result.model_dump(mode="json")
+
     @api.post("/v1/scenarios/compare")
     def compare_scenarios(payload: ScenarioCompare) -> dict[str, Any]:
         return container.scenarios.compare(payload.options).model_dump()
@@ -707,7 +747,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="unknown canonical project")
         result = container.project_validator.validate_registration(contract, payload.registration)
         if payload.persist and result.valid:
-            container.registry.upsert(RegistryKind.PROJECT, payload.key, payload.registration)
+            registration = ProjectRegistration(
+                key=payload.key,
+                **payload.registration,
+            )
+            container.projects.save(registration)
             container.audit.record(
                 "project.registered",
                 authenticated_actor("local-owner") or "local-owner",
