@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
+from hermes.agent_routing import AgentRouteRequest, AgentRouter
 from hermes.auth import authenticated_actor
 from hermes.cognitive import HybridIntentEngine, KnowledgeGapDetector, TaskGraphPlanner
 from hermes.contracts import AuditSink, KnowledgeProvider, MissionStore, ResearchProvider
-from hermes.domain import Mission
+from hermes.domain import AgentSpec, Mission
 from hermes.research import ResearchRequest
 from hermes.routing import ProjectRouter
 from hermes.telemetry import traced
@@ -22,6 +24,7 @@ class HermesOrchestrator:
         audit: AuditSink,
         knowledge: KnowledgeProvider | None = None,
         research: ResearchProvider | None = None,
+        agent_provider: Callable[[], list[AgentSpec]] | None = None,
     ) -> None:
         self.intent_engine = intent_engine
         self.planner = planner
@@ -30,6 +33,7 @@ class HermesOrchestrator:
         self.audit = audit
         self.knowledge = knowledge
         self.research = research
+        self.agent_provider = agent_provider
         self.gaps = KnowledgeGapDetector()
 
     async def create_mission(self, request: str, *, actor: str = "owner") -> Mission:
@@ -69,6 +73,25 @@ class HermesOrchestrator:
             research_package_status = package.status
             research_evidence_count = len(package.evidence)
         tasks = self.planner.plan(intent, projects)
+        agent_routes: dict[str, str] = {}
+        if self.agent_provider is not None:
+            agent_router = AgentRouter(self.agent_provider())
+            for task in tasks:
+                if task.project is None:
+                    continue
+                try:
+                    decision = agent_router.route(
+                        AgentRouteRequest(
+                            project=task.project,
+                            max_risk=task.risk,
+                            requires_external_action=intent.requires_external_action,
+                        )
+                    )
+                except LookupError:
+                    continue
+                task.metadata["agent_id"] = decision.agent_id
+                task.metadata["agent_route_score"] = decision.score
+                agent_routes[task.task_id] = decision.agent_id
         mission = Mission(
             goal=intent.goal,
             intent=intent,
@@ -80,6 +103,7 @@ class HermesOrchestrator:
                 "research_request_id": research_request_id,
                 "research_package_status": research_package_status,
                 "research_evidence_count": research_evidence_count,
+                "agent_routes": agent_routes,
             },
         )
         self.mission_store.save(mission)
