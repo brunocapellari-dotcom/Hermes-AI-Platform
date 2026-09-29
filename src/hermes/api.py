@@ -46,7 +46,7 @@ from hermes.project_registry import ProjectRegistration, ProjectRegistry
 from hermes.readiness import ReadinessEvidence, evaluate_final_readiness
 from hermes.recovery import FailureRecoveryEngine
 from hermes.release_integrity import release_integrity
-from hermes.registry import PersistentModelRegistry, RegistryKind, SqlRegistry
+from hermes.registry import PersistentAgentRegistry, PersistentModelRegistry, RegistryKind, SqlRegistry
 from hermes.routing import ProjectRouter
 from hermes.security import PromptInjectionDetector
 from hermes.self_improvement import ImprovementProposal, PersistentImprovementEngine
@@ -184,6 +184,7 @@ class AppContainer:
         self.registry = SqlRegistry(self.db)
         self.approvals = SqlApprovalStore(self.registry)
         self.models = PersistentModelRegistry(self.registry)
+        self.agents = PersistentAgentRegistry(self.registry)
         self.usage = SqlUsageStore(self.db)
         self.budget = BudgetGuard(self.usage, self.registry)
         self.world_state = WorldStateBuilder(
@@ -233,6 +234,7 @@ class AppContainer:
             audit=self.audit,
             knowledge=knowledge,
             research=research,
+            agent_provider=self.agents.load,
         )
         self.policy = build_policy_engine(
             allow_external_actions=settings.allow_external_actions,
