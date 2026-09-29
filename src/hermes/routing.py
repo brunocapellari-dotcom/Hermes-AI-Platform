@@ -20,7 +20,7 @@ DEFAULT_CAPABILITY_REGISTRY: dict[str, str] = {
     "geopolitical_analysis": "GEOPOLITICAL_WATCH",
     "content_creation": "CONTENT_FACTORY",
     "message_processing": "WHATSAPP_AI",
-    "training_plan": "PERSONAL_PERFORMANCE",
+    "training_plan": "PERSONAL_PERFORMANCE",\n    "simulation": "WORLDWAR_MODERN",\n    "recipe_analysis": "CULINARIA",\n    "catechesis_content": "CATEQUESE_INFANTIL",\n    "racing_management_simulation": "RACING_TEAM_MANAGER",\n    "football_management_simulation": "FOOTBALL_MANAGER",
     "agent_management": "HERMES",
     "model_management": "HERMES",
     "cross_project_analysis": "HERMES",
