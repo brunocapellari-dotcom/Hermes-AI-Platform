@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/schemas/agent_manifest.schema.json",
+  "title": "Hermes Agent Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent_id", "version", "entry", "instructions", "knowledge", "tools", "triggers", "limits"],
+  "properties": {
+    "agent_id": {"type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9._-]+$"},
+    "version": {"type": "string", "minLength": 1},
+    "project_id": {"type": ["string", "null"]},
+    "owner": {"type": ["string", "null"]},
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channels", "accepted_inputs"],
+      "properties": {
+        "channels": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "accepted_inputs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "instructions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mission", "objectives", "rules"],
+      "properties": {
+        "mission": {"type": "string", "minLength": 1},
+        "objectives": {"type": "array", "items": {"type": "string"}},
+        "rules": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "knowledge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_sources", "retrieval_sources"],
+      "properties": {
+        "canonical_sources": {"type": "array", "items": {"type": "string"}},
+        "retrieval_sources": {"type": "array", "items": {"type": "string"}},
+        "external_content_trust": {"type": "string", "enum": ["untrusted", "mixed", "trusted"], "default": "untrusted"}
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool_id", "scopes"],
+        "properties": {
+          "tool_id": {"type": "string", "minLength": 1},
+          "scopes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "read_only": {"type": "boolean", "default": true}
+        }
+      }
+    },
+    "triggers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "events": {"type": "array", "items": {"type": "string"}},
+        "schedules": {"type": "array", "items": {"type": "string"}},
+        "conditions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prohibited_actions", "approval_required"],
+      "properties": {
+        "prohibited_actions": {"type": "array", "items": {"type": "string"}},
+        "approval_required": {"type": "array", "items": {"type": "string"}},
+        "timeout_seconds": {"type": ["integer", "null"], "minimum": 1},
+        "budget": {"type": ["number", "null"], "minimum": 0},
+        "rate_limit_per_minute": {"type": ["integer", "null"], "minimum": 1}
+      }
+    }
+  }
+}
