@@ -1,24 +1,30 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hermes.local/schemas/tool_manifest.schema.json",
-  "title": "Hermes Tool Manifest",
-  "type": "object",
+  "$defs": {
+    "ApprovalPolicy": {"enum": ["allow", "policy", "human", "deny"], "title": "ApprovalPolicy", "type": "string"},
+    "CostClass": {"enum": ["free", "low", "medium", "high"], "title": "CostClass", "type": "string"},
+    "RiskLevel": {"enum": ["low", "medium", "high", "critical"], "title": "RiskLevel", "type": "string"},
+    "SideEffects": {"enum": ["none", "reversible", "external", "irreversible"], "title": "SideEffects", "type": "string"}
+  },
   "additionalProperties": false,
-  "required": ["tool_id", "version", "owner", "project", "read_only", "side_effects", "required_scopes", "risk_level", "input_schema", "output_schema"],
   "properties": {
-    "tool_id": {"type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9._-]+$"},
-    "version": {"type": "string", "minLength": 1},
-    "owner": {"type": "string", "minLength": 1},
-    "project": {"type": "string", "minLength": 1},
-    "read_only": {"type": "boolean"},
-    "side_effects": {"type": "string", "enum": ["none", "reversible", "external", "irreversible"]},
-    "required_scopes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-    "risk_level": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
-    "timeout_seconds": {"type": ["integer", "null"], "minimum": 1},
-    "cost_class": {"type": ["string", "null"], "enum": ["free", "low", "medium", "high", null]},
-    "approval_policy": {"type": "string", "enum": ["allow", "policy", "human", "deny"]},
-    "input_schema": {"type": "object"},
-    "output_schema": {"type": "object"},
-    "provenance_required": {"type": "boolean", "default": true}
-  }
+    "tool_id": {"minLength": 1, "pattern": "^[a-zA-Z0-9._-]+$", "title": "Tool Id", "type": "string"},
+    "version": {"minLength": 1, "title": "Version", "type": "string"},
+    "owner": {"minLength": 1, "title": "Owner", "type": "string"},
+    "project": {"minLength": 1, "title": "Project", "type": "string"},
+    "read_only": {"title": "Read Only", "type": "boolean"},
+    "side_effects": {"$ref": "#/$defs/SideEffects"},
+    "required_scopes": {"items": {"type": "string"}, "title": "Required Scopes", "type": "array"},
+    "risk_level": {"$ref": "#/$defs/RiskLevel"},
+    "timeout_seconds": {"anyOf": [{"minimum": 1, "type": "integer"}, {"type": "null"}], "default": null, "title": "Timeout Seconds"},
+    "cost_class": {"anyOf": [{"$ref": "#/$defs/CostClass"}, {"type": "null"}], "default": null},
+    "approval_policy": {"$ref": "#/$defs/ApprovalPolicy", "default": "policy"},
+    "input_schema": {"additionalProperties": true, "title": "Input Schema", "type": "object"},
+    "output_schema": {"additionalProperties": true, "title": "Output Schema", "type": "object"},
+    "provenance_required": {"default": true, "title": "Provenance Required", "type": "boolean"}
+  },
+  "required": ["tool_id", "version", "owner", "project", "read_only", "side_effects", "risk_level"],
+  "title": "ToolManifest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "GENERATED from contracts/manifests.py; do not edit manually."
 }
