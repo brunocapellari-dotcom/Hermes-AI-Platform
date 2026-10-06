@@ -27,7 +27,7 @@ class RetryPolicy(BaseModel):
     max_delay_seconds: float = Field(default=5.0, ge=0, le=300)
 
     @model_validator(mode="after")
-    def validate_backoff(self) -> "RetryPolicy":
+    def validate_backoff(self) -> RetryPolicy:
         if self.max_delay_seconds < self.base_delay_seconds:
             raise ValueError("max_delay_seconds must be >= base_delay_seconds")
         return self
