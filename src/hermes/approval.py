@@ -116,10 +116,10 @@ class SqlApprovalStore:
                         payload=updated.model_dump(mode="json"),
                     )
                     return ApprovalRecord.model_validate(item.payload)
-                except RuntimeError:
+                except RuntimeError as exc:
                     latest = self.get(record.approval_id)
                     if latest is None:
-                        raise KeyError(record.approval_id)
+                        raise KeyError(record.approval_id) from exc
                     return latest
         return record
 
