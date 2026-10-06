@@ -45,13 +45,13 @@ class FakeConnection:
         self.statements: list[str] = []
         self.autocommit = False
 
-    def __enter__(self) -> "FakeConnection":
+    def __enter__(self) -> FakeConnection:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
         return False
 
-    def execution_options(self, **kwargs: Any) -> "FakeConnection":
+    def execution_options(self, **kwargs: Any) -> FakeConnection:
         self.autocommit = kwargs.get("isolation_level") == "AUTOCOMMIT"
         return self
 
