@@ -7,7 +7,7 @@ Projects report evidence; they never self-promote to operational.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,14 +16,14 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ServiceState(str, Enum):
+class ServiceState(StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     BLOCKED = "blocked"
     UNKNOWN = "unknown"
 
 
-class EvidenceKind(str, Enum):
+class EvidenceKind(StrEnum):
     CI = "ci"
     HEALTH = "health"
     READINESS = "readiness"
