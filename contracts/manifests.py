@@ -6,7 +6,7 @@ Pydantic models are the schema source of truth. JSON Schema files under
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,34 +16,34 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ExternalContentTrust(str, Enum):
+class ExternalContentTrust(StrEnum):
     UNTRUSTED = "untrusted"
     MIXED = "mixed"
     TRUSTED = "trusted"
 
 
-class SideEffects(str, Enum):
+class SideEffects(StrEnum):
     NONE = "none"
     REVERSIBLE = "reversible"
     EXTERNAL = "external"
     IRREVERSIBLE = "irreversible"
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
 
-class ApprovalPolicy(str, Enum):
+class ApprovalPolicy(StrEnum):
     ALLOW = "allow"
     POLICY = "policy"
     HUMAN = "human"
     DENY = "deny"
 
 
-class CostClass(str, Enum):
+class CostClass(StrEnum):
     FREE = "free"
     LOW = "low"
     MEDIUM = "medium"
