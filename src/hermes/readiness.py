@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class GateStatus(StrEnum):
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105 -- readiness state, not a credential
     FAIL = "fail"
     BLOCKED = "blocked"
 
