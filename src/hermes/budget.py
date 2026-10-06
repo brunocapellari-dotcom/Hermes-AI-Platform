@@ -17,7 +17,7 @@ class BudgetPolicy(BaseModel):
     soft_threshold: float = Field(default=0.8, gt=0, le=1)
 
     @model_validator(mode="after")
-    def require_limit(self) -> "BudgetPolicy":
+    def require_limit(self) -> BudgetPolicy:
         if not any(
             limit is not None
             for limit in (self.max_daily_usd, self.max_weekly_usd, self.max_monthly_usd)
