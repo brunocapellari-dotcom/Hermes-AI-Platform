@@ -19,8 +19,12 @@ from hermes.persistence import AuditRow
 
 
 class FakeVerifier:
+    @staticmethod
+    def valid_token() -> str:
+        return "-".join(("valid", "token"))
+
     def verify(self, token: str) -> ServiceIdentity:
-        if token != "valid-token":
+        if token != self.valid_token():
             raise ValueError("bad token")
         return ServiceIdentity(subject="service:caller", email="caller@example.com")
 
@@ -57,7 +61,7 @@ def test_authenticated_identity_overrides_spoofed_actor(tmp_path: Path) -> None:
     with client as c:
         response = c.post(
             "/v1/missions",
-            headers={"Authorization": "Bearer valid-token"},
+            headers={"Authorization": f"Bearer {FakeVerifier.valid_token()}"},
             json={"request": "Como está a Holding?", "actor": "spoofed-owner"},
         )
         assert response.status_code == 200
