@@ -46,7 +46,7 @@ from hermes.project_registry import ProjectRegistration, ProjectRegistry
 from hermes.readiness import ReadinessEvidence, evaluate_final_readiness
 from hermes.recovery import FailureRecoveryEngine
 from hermes.release_integrity import release_integrity
-from hermes.registry import PersistentAgentRegistry, PersistentModelRegistry, RegistryKind, SqlRegistry
+from hermes.registry import PersistentAgentRegistry, PersistentModelRegistry, SqlRegistry
 from hermes.routing import ProjectRouter
 from hermes.security import PromptInjectionDetector
 from hermes.self_improvement import ImprovementProposal, PersistentImprovementEngine
