@@ -47,5 +47,5 @@ output "application_database" {
 }
 
 output "workflow_database" {
-  value = google_sql_database.hermes_workflows.name
+  value = var.dbos_reference_enabled ? google_sql_database.hermes_workflows[0].name : null
 }
