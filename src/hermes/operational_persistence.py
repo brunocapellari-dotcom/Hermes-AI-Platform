@@ -36,6 +36,41 @@ def _sha256(payload: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _fingerprint(model: BaseModel, *, exclude: set[str]) -> str:
+    payload = json.dumps(
+        model.model_dump(mode="json", exclude=exclude),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return _sha256(payload)
+
+
+def _request_fingerprint(request: RequestModel) -> str:
+    return _fingerprint(
+        request,
+        exclude={"request_id", "correlation_id", "created_at"},
+    )
+
+
+def _task_fingerprint(task: TaskModel) -> str:
+    return _fingerprint(
+        task,
+        exclude={
+            "task_id",
+            "agent_id",
+            "status",
+            "attempt",
+            "output_refs",
+            "started_at",
+            "finished_at",
+            "error",
+            "created_at",
+            "updated_at",
+        },
+    )
+
+
 class OperationalRequestRow(Base):
     __tablename__ = "hermes_requests"
     __table_args__ = (
@@ -134,7 +169,7 @@ class SqlOperationalStore:
 
     def save_request(self, request: RequestModel) -> RequestModel:
         payload = _canonical_payload(request)
-        digest = _sha256(payload)
+        digest = _request_fingerprint(request)
         with self.db.sessions() as session:
             existing = session.scalar(
                 select(OperationalRequestRow).where(
@@ -211,7 +246,7 @@ class SqlOperationalStore:
 
     def save_task(self, task: TaskModel) -> TaskModel:
         payload = _canonical_payload(task)
-        digest = _sha256(payload)
+        digest = _task_fingerprint(task)
         with self.db.sessions() as session:
             by_key = session.scalar(
                 select(OperationalTaskRow).where(
@@ -246,6 +281,8 @@ class SqlOperationalStore:
                 )
                 session.add(row)
             else:
+                if row.payload_sha256 != digest:
+                    raise ValueError("task immutable input changed for existing task_id")
                 current = TaskModel.model_validate_json(row.payload)
                 validate_task_transition(current.status, task.status)
                 row.agent_id = task.agent_id
@@ -253,7 +290,6 @@ class SqlOperationalStore:
                 row.priority = task.priority.value
                 row.attempt = task.attempt
                 row.max_attempts = task.max_attempts
-                row.payload_sha256 = digest
                 row.payload = payload
                 row.started_at = task.started_at
                 row.finished_at = task.finished_at
