@@ -67,6 +67,7 @@ ignore = ["S101", "E501", "I001"]
 
 [tool.mypy]
 python_version = "3.12"
+mypy_path = "typings"
 strict = true
 warn_unused_ignores = true
 ignore_missing_imports = true
