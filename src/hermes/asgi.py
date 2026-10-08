@@ -1,3 +1,7 @@
+from typing import cast
+
+from starlette.types import ASGIApp
+
 from hermes.api import app as hermes_app
 from hermes.auth import GoogleOIDCVerifier, ServiceAuthMiddleware
 from hermes.authorization import build_policy_engine
@@ -25,7 +29,7 @@ policy = build_policy_engine(
 )
 control_plane = ControlPlaneAuthorizationMiddleware(hermes_app, policy=policy)
 app = ServiceAuthMiddleware(
-    control_plane,
+    cast(ASGIApp, control_plane),
     verifier=verifier,
     required=settings.service_auth_required,
 )
