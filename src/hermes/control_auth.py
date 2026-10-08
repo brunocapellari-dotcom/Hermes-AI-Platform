@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from hermes.auth import authenticated_actor
 from hermes.domain import PolicyRequest, RiskLevel, TrustLevel
@@ -134,14 +134,7 @@ class ControlPlaneAuthorizationMiddleware:
 
     def __init__(
         self,
-        app: Callable[
-            [
-                dict[str, Any],
-                Callable[[], Awaitable[dict[str, Any]]],
-                Callable[[dict[str, Any]], Awaitable[None]],
-            ],
-            Awaitable[None],
-        ],
+        app: ASGIApp,
         *,
         policy: PolicyEngine,
     ) -> None:
@@ -149,7 +142,7 @@ class ControlPlaneAuthorizationMiddleware:
         self.policy = policy
 
     @staticmethod
-    async def _forbidden(send: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
+    async def _forbidden(send: Send) -> None:
         body = b'{"detail":"forbidden"}'
         await send(
             {
@@ -165,9 +158,9 @@ class ControlPlaneAuthorizationMiddleware:
 
     async def __call__(
         self,
-        scope: dict[str, Any],
-        receive: Callable[[], Awaitable[dict[str, Any]]],
-        send: Callable[[dict[str, Any]], Awaitable[None]],
+        scope: Scope,
+        receive: Receive,
+        send: Send,
     ) -> None:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
