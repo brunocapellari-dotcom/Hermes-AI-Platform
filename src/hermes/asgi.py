@@ -1,12 +1,20 @@
-from typing import cast
-
-from starlette.types import ASGIApp
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 from hermes.api import app as hermes_app
 from hermes.auth import GoogleOIDCVerifier, ServiceAuthMiddleware
 from hermes.authorization import build_policy_engine
 from hermes.config import get_settings
 from hermes.control_auth import ControlPlaneAuthorizationMiddleware
+
+LegacyASGIApp = Callable[
+    [
+        dict[str, Any],
+        Callable[[], Awaitable[dict[str, Any]]],
+        Callable[[dict[str, Any]], Awaitable[None]],
+    ],
+    Awaitable[None],
+]
 
 settings = get_settings()
 verifier = (
@@ -29,7 +37,7 @@ policy = build_policy_engine(
 )
 control_plane = ControlPlaneAuthorizationMiddleware(hermes_app, policy=policy)
 app = ServiceAuthMiddleware(
-    cast(ASGIApp, control_plane),
+    cast(LegacyASGIApp, control_plane),
     verifier=verifier,
     required=settings.service_auth_required,
 )
