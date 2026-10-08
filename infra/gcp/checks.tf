@@ -1,6 +1,6 @@
 check "immutable_release_identity" {
   assert {
-    condition     = !(
+    condition = !(
       var.runtime_enabled ||
       var.migration_job_enabled ||
       var.dbos_reference_enabled
