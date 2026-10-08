@@ -4,7 +4,7 @@ check "immutable_release_identity" {
       var.runtime_enabled ||
       var.migration_job_enabled ||
       var.dbos_reference_enabled
-    ) || (
+      ) || (
       length(trimspace(var.release_version)) >= 7 &&
       can(regex("^[0-9a-f]{64}$", lower(var.dependency_lock_sha256)))
     )
