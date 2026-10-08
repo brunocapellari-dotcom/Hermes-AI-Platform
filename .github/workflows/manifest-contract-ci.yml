@@ -16,10 +16,12 @@ jobs:
     env:
       PYTHONPATH: .
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: python -m pip install "pydantic>=2.10,<3" "pytest>=8,<10" "ruff>=0.8,<1"
+      - run: python -m pip install "pydantic>=2.10,<3" "pytest>=8,<10" "ruff>=0.8,<1" "pytest-cov>=6.2,<8"
       - run: ruff check contracts
       - run: pytest -q tests/test_ecosystem_e2e.py
