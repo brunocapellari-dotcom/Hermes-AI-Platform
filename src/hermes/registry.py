@@ -118,7 +118,7 @@ class SqlRegistry:
                 )
                 .values(**values)
             )
-            if result.rowcount != 1:
+            if getattr(result, "rowcount", None) != 1:
                 session.rollback()
                 raise RuntimeError("registry compare-and-set failed")
             session.commit()
