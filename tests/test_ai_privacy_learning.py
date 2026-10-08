@@ -6,6 +6,7 @@ from hermes.domain import ModelClass, ModelProfile, ModelRouteRequest
 from hermes.model_intelligence import AdaptiveModelRouter, PersistentModelIntelligence
 from hermes.persistence import Database
 from hermes.privacy import SensitiveDataGuard
+from hermes.registry import PersistentModelRegistry, SqlRegistry
 from hermes.telemetry import SqlUsageStore
 
 
@@ -41,10 +42,14 @@ def make_profile(model_id: str, *, local: bool, quality: float) -> ModelProfile:
 def test_secret_skips_external_and_falls_back_to_local(tmp_path: Path) -> None:
     db = make_db(tmp_path, "secret.db")
     intelligence = PersistentModelIntelligence(db)
-    router = AdaptiveModelRouter(
-        [make_profile("cloud", local=False, quality=1.0), make_profile("local", local=True, quality=0.7)],
-        intelligence,
-    )
+    profiles = [
+        make_profile("cloud", local=False, quality=1.0),
+        make_profile("local", local=True, quality=0.7),
+    ]
+    model_registry = PersistentModelRegistry(SqlRegistry(db))
+    for profile in profiles:
+        model_registry.save(profile)
+    router = AdaptiveModelRouter(profiles, intelligence)
     gateway = CaptureGateway()
     service = AIService(
         gateway=gateway,
@@ -72,7 +77,9 @@ def test_secret_skips_external_and_falls_back_to_local(tmp_path: Path) -> None:
 def test_personal_data_is_redacted_for_external_model(tmp_path: Path) -> None:
     db = make_db(tmp_path, "pii.db")
     intelligence = PersistentModelIntelligence(db)
-    router = AdaptiveModelRouter([make_profile("cloud", local=False, quality=1.0)], intelligence)
+    profiles = [make_profile("cloud", local=False, quality=1.0)]
+    PersistentModelRegistry(SqlRegistry(db)).save(profiles[0])
+    router = AdaptiveModelRouter(profiles, intelligence)
     gateway = CaptureGateway()
     service = AIService(
         gateway=gateway,
