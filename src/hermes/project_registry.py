@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from enum import StrEnum
 from typing import Any
 
@@ -79,7 +80,7 @@ class ProjectRegistry:
         ]
 
     def autonomy_matrix(self) -> AutonomyMatrix:
-        policies: list[CapabilityAutonomyPolicy] = []
+        policies: builtins.list[CapabilityAutonomyPolicy] = []
         for registration in self.list():
             policies.extend(registration.autonomy)
         return AutonomyMatrix(policies)
