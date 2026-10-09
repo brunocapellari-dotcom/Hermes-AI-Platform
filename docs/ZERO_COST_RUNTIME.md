@@ -67,3 +67,41 @@ Zero cost does not relax security. Keep the service on localhost unless a review
 ## Optional later upgrade
 
 Cloud Run, Cloud SQL, BigQuery, hosted model providers, hosted telemetry, or other paid services can be added later only when the owner explicitly accepts the cost. They are not part of the zero-cost release gate.
+
+
+## Hardened local container profile
+
+The repository includes `docker-compose.zero-cost.yml`. It binds Hermes only to `127.0.0.1:8080`, drops Linux capabilities, enables `no-new-privileges`, keeps the container filesystem read-only, and persists only the SQLite data volume.
+
+Start:
+
+```bash
+docker compose -f docker-compose.zero-cost.yml up -d --build
+```
+
+Validate:
+
+```bash
+docker compose -f docker-compose.zero-cost.yml ps
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/ready
+```
+
+Stop without deleting data:
+
+```bash
+docker compose -f docker-compose.zero-cost.yml down
+```
+
+Do not add `-v` to the down command unless the SQLite volume is intentionally being destroyed.
+
+## Backup and restore drill
+
+The local runtime includes a verified SQLite backup/restore CLI. It refuses to overwrite an existing destination and runs SQLite integrity checks before and after copying.
+
+```bash
+hermes-local-db backup ./data/hermes.db ./backups/hermes-backup.db
+hermes-local-db restore ./backups/hermes-backup.db ./restore-test/hermes.db
+```
+
+After a successful restore drill, validate the restored database before replacing any production file. Backup confidentiality depends on host storage protection; use the operating system's disk/device encryption for the data and backup locations when available.
