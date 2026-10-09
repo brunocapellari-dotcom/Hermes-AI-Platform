@@ -18,6 +18,9 @@ class ProjectHealth(StrEnum):
     BLOCKED = "blocked"
     WAITING_OWNER = "waiting_owner"
     UNKNOWN = "unknown"
+    PAUSED = "paused"
+    DISCONTINUED = "discontinued"
+    MAINTENANCE = "maintenance"
 
 
 class ProjectRegistration(BaseModel):
@@ -91,7 +94,8 @@ class ProjectRegistry:
             (
                 project
                 for project in self.list()
-                if capability in project.capabilities and project.health != ProjectHealth.BLOCKED
+                if capability in project.capabilities
+                and project.health in {ProjectHealth.ACTIVE, ProjectHealth.DEGRADED}
             ),
             key=lambda item: (item.health != ProjectHealth.ACTIVE, item.key),
         )
