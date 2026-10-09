@@ -4,10 +4,8 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint, or_, select
+from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hermes.operational_contracts import EventEnvelope
