@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hermes.autonomy import AutonomyMatrix, CapabilityAutonomyPolicy
 from hermes.ecosystem import CANONICAL_PROJECTS, ProjectContractValidator
+from hermes.network_policy import is_secure_service_url
 from hermes.registry import RegistryKind, SqlRegistry
 
 
@@ -34,16 +35,16 @@ class ProjectRegistration(BaseModel):
 
     @field_validator("base_url")
     @classmethod
-    def require_https(cls, value: str) -> str:
-        if not value.startswith("https://"):
-            raise ValueError("project base_url must use HTTPS")
+    def require_https_or_loopback(cls, value: str) -> str:
+        if not is_secure_service_url(value):
+            raise ValueError("project base_url must use HTTPS or HTTP loopback")
         return value.rstrip("/")
 
     @field_validator("audience")
     @classmethod
-    def audience_https(cls, value: str | None) -> str | None:
-        if value is not None and not value.startswith("https://"):
-            raise ValueError("project audience must use HTTPS")
+    def audience_https_or_loopback(cls, value: str | None) -> str | None:
+        if value is not None and not is_secure_service_url(value):
+            raise ValueError("project audience must use HTTPS or HTTP loopback")
         return value
 
 
