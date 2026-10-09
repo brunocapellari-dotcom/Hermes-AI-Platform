@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hermes.network_policy import is_secure_service_url
+
 
 DOMAIN_READ_ENDPOINTS = (
     "/health",
@@ -87,8 +89,8 @@ class ProjectContractValidator:
     ) -> ContractValidation:
         errors: list[str] = []
         base_url = registration.get("base_url")
-        if not isinstance(base_url, str) or not base_url.startswith("https://"):
-            errors.append("base_url must use HTTPS")
+        if not isinstance(base_url, str) or not is_secure_service_url(base_url):
+            errors.append("base_url must use HTTPS or HTTP loopback")
 
         capabilities = registration.get("capabilities")
         if not isinstance(capabilities, list) or not all(
@@ -117,9 +119,9 @@ class ProjectContractValidator:
 
         audience = registration.get("audience")
         if audience is not None and (
-            not isinstance(audience, str) or not audience.startswith("https://")
+            not isinstance(audience, str) or not is_secure_service_url(audience)
         ):
-            errors.append("audience must use HTTPS")
+            errors.append("audience must use HTTPS or HTTP loopback")
 
         return ContractValidation(valid=not errors, errors=errors)
 
