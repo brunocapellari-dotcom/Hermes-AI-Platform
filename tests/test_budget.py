@@ -106,3 +106,20 @@ def test_budget_policy_requires_at_least_one_window() -> None:
 
     with pytest.raises(ValueError, match="at least one spend limit"):
         BudgetPolicy(project="P")
+
+
+def test_zero_cost_mode_blocks_external_without_budget_policy(tmp_path: Path) -> None:
+    db = Database(f"sqlite:///{tmp_path / 'zero-cost.db'}")
+    db.create_schema()
+    usage = SqlUsageStore(db)
+    guard = BudgetGuard(usage, zero_cost_mode=True)
+
+    external = profile("external")
+    local = profile("local", local=True)
+
+    denied = guard.check("P", external)
+    allowed = guard.check("P", local)
+
+    assert denied.allowed is False
+    assert denied.reason == "zero-cost mode permits only local model routes"
+    assert allowed.allowed is True
