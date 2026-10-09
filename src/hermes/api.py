@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -293,6 +294,14 @@ class AppContainer:
         self.compactor = ContextCompactor()
         self.context_fabric = ContextFabric(router=self.context, compactor=self.compactor)
         self.projects = ProjectRegistry(self.registry)
+        self.operational_state = SqlOperationalStore(self.db)
+        self.events = SqlEventStore(self.db)
+        self.operational_admission = OperationalAdmissionService(
+            state=self.operational_state,
+            events=self.events,
+            projects=self.projects,
+            policy=self.policy,
+        )
         self.scenarios = ScenarioEngine()
         self.hypotheses = HypothesisEngine()
         self.improvements = PersistentImprovementEngine(self.registry)
@@ -340,6 +349,94 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with container.db.engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ready"}
+
+    @api.post("/requests")
+    def create_request(payload: RequestModel) -> dict[str, Any]:
+        actor = authenticated_actor("local-owner") or "local-owner"
+        try:
+            result = container.operational_admission.admit(payload, actor=actor)
+        except LookupError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        return result.model_dump(mode="json")
+
+    @api.get("/requests/{request_id}")
+    def get_request(request_id: str) -> dict[str, Any]:
+        request = container.operational_state.get_request(request_id)
+        if request is None:
+            raise HTTPException(status_code=404, detail="request not found")
+        return request.model_dump(mode="json")
+
+    @api.get("/tasks/{task_id}")
+    def get_task(task_id: str) -> dict[str, Any]:
+        task = container.operational_state.get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        return task.model_dump(mode="json")
+
+    @api.post("/tasks/{task_id}/cancel")
+    def cancel_task(task_id: str) -> dict[str, Any]:
+        task = container.operational_state.get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        if task.status == TaskStatus.COMPLETED:
+            raise HTTPException(status_code=409, detail="completed task cannot be cancelled")
+        if task.status != TaskStatus.CANCELLED:
+            cancelled = task.model_copy(
+                update={
+                    "status": TaskStatus.CANCELLED,
+                    "finished_at": datetime.now(UTC),
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+            container.operational_state.save_task(cancelled)
+        else:
+            cancelled = task
+
+        event_id = "event-" + hashlib.sha256(
+            f"{task_id}|TASK_CANCELLED".encode("utf-8")
+        ).hexdigest()[:32]
+        if container.events.get(event_id) is None:
+            request = container.operational_state.get_request(cancelled.request_id)
+            correlation_id = request.correlation_id if request is not None else cancelled.request_id
+            container.events.append(
+                EventEnvelope(
+                    event_id=event_id,
+                    event_type=EventType.TASK_CANCELLED,
+                    producer="hermes-api",
+                    project_id=cancelled.project_id,
+                    correlation_id=correlation_id,
+                    causation_id=cancelled.task_id,
+                    payload={
+                        "task_id": cancelled.task_id,
+                        "workflow_id": cancelled.workflow_id,
+                        "status": cancelled.status.value,
+                    },
+                )
+            )
+        return cancelled.model_dump(mode="json")
+
+    @api.get("/workflows/{workflow_id}")
+    def get_workflow(workflow_id: str) -> dict[str, Any]:
+        workflow = container.operational_state.get_workflow(workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="workflow not found")
+        return {
+            "workflow": workflow.model_dump(mode="json"),
+            "tasks": [
+                item.model_dump(mode="json")
+                for item in container.operational_state.tasks_for_workflow(workflow_id)
+            ],
+        }
+
+    @api.get("/agents")
+    def operational_agents() -> list[dict[str, Any]]:
+        return [agent.model_dump(mode="json") for agent in container.agents.load()]
+
+    @api.get("/services")
+    def operational_services() -> list[dict[str, Any]]:
+        return [project.model_dump(mode="json") for project in container.projects.list()]
 
     @api.get("/v1/release/readiness")
     def release_readiness() -> dict[str, Any]:
