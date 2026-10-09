@@ -4,6 +4,7 @@ Canonical operational status for Hermes go-live work.
 
 | ID | Task | Priority | Status | Dependency | Acceptance | Test | Evidence | Commit | Blocker |
 |---|---|---:|---|---|---|---|---|---|---|
+| HGL-000 | Zero-cost production baseline | P0 | TESTING | none | zero incremental vendor spend; paid cloud/providers not required | unit + configuration + local deploy | `docs/ZERO_COST_RUNTIME.md` | pending | CI validation pending |
 | HGL-001 | Restore green baseline CI on foundation | P0 | TESTING | none | contract CI, manifest CI, foundation CI all green | GitHub Actions | PR #8 | 3d9eabce62e313cac963874846706eb539c37d02 | foundation CI pending |
 | HGL-002 | Canonical Request/Task/Workflow/Event/Error contracts | P0 | READY | HGL-001 | schemas match operational mission and reject invalid states | unit + schema tests | pending | pending | none |
 | HGL-003 | Durable request/task/event persistence + migrations | P0 | TODO | HGL-002 | restart-safe state with versioned migrations | migration + integration | pending | pending | none |
@@ -22,8 +23,8 @@ Canonical operational status for Hermes go-live work.
 | HGL-016 | Second execution without code changes | P0 | TODO | HGL-013,HGL-014,HGL-015 | all selected flows run again on new inputs | E2E rerun | pending | pending | none |
 | HGL-017 | Security regression gate | P0 | TODO | HGL-011 | auth bypass, privilege, injection, replay, secret leakage blocked | security suite | pending | pending | none |
 | HGL-018 | Backup + restore drill | P0 | TODO | HGL-003 | restore reproduces required operational state | restore drill | pending | pending | none |
-| HGL-019 | Reproducible deploy + smoke + rollback | P0 | TODO | all preceding P0 | same green commit deploys and can roll back | deploy/smoke/rollback | pending | pending | none |
-| HGL-020 | GO-LIVE gate | P0 | TODO | HGL-001..019 | no unmitigated P0 and final question is YES | full gate review | pending | pending | none |
+| HGL-019 | Reproducible deploy + smoke + rollback | P0 | TODO | all preceding P0 | same green commit deploys locally/containerized at R$0 incremental vendor spend and can roll back; paid cloud optional | deploy/smoke/rollback | pending | pending | none |
+| HGL-020 | GO-LIVE gate | P0 | TODO | HGL-000..019 | no unmitigated P0 and final question is YES | full gate review | pending | pending | none |
 
 ## Scope freeze
 

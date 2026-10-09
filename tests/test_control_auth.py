@@ -42,8 +42,10 @@ def test_protected_operation_map_is_specific() -> None:
         "/v1/improvements/advance": "can_manage_improvements",
         "/v1/models/performance": "can_record_model_performance",
     }
+    read_only = {"/v1/approvals", "/v1/approvals/a1"}
     for path, relation in expected.items():
-        protected = protected_operation("POST", path)
+        method = "GET" if path in read_only else "POST"
+        protected = protected_operation(method, path)
         assert protected is not None
         assert protected.relation == relation
     assert protected_operation("GET", "/v1/missions/abc/dispatch") is None

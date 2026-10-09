@@ -46,9 +46,16 @@ class BudgetDecision(BaseModel):
 
 
 class BudgetGuard:
-    def __init__(self, usage: SqlUsageStore, registry: SqlRegistry | None = None) -> None:
+    def __init__(
+        self,
+        usage: SqlUsageStore,
+        registry: SqlRegistry | None = None,
+        *,
+        zero_cost_mode: bool = False,
+    ) -> None:
         self.usage = usage
         self.registry = registry or SqlRegistry(usage.db)
+        self.zero_cost_mode = zero_cost_mode
 
     @staticmethod
     def policy_id(project: str | None) -> str:
@@ -101,6 +108,11 @@ class BudgetGuard:
         return windows
 
     def check(self, project: str | None, profile: ModelProfile) -> BudgetDecision:
+        if self.zero_cost_mode and not profile.local:
+            return BudgetDecision(
+                allowed=False,
+                reason="zero-cost mode permits only local model routes",
+            )
         policy = self.policy(project)
         if policy is None:
             return BudgetDecision(allowed=True, reason="no budget policy configured")

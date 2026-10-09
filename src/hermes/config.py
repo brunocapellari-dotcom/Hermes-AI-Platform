@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     )
 
     environment: str = "production"
+    zero_cost_mode: bool = True
     database_url: str = "sqlite:///./hermes.db"
     dbos_system_database_url: str | None = None
     dbos_application_name: str = "hermes-worker"

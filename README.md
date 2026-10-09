@@ -15,8 +15,13 @@ Hermes is the intelligence and orchestration layer. It does not replace the AI-H
 - Cognitive capability does not grant authority.
 - Every production-relevant action is observable and auditable.
 - The AI-Holding remains the portfolio/governance authority.
-- Google Cloud is the target production platform; local/Replit development must remain portable.
+- Zero incremental vendor spend is the default go-live target; local execution is the production baseline and paid cloud infrastructure is optional post-go-live.
 
 ## Current state
 
 Repository bootstrap only. Production readiness is determined exclusively by acceptance tests, Golden Tasks, Security Test Lab, and full E2E results.
+
+
+## Zero-cost release
+
+The canonical zero-cost runtime and deployment policy is documented in `docs/ZERO_COST_RUNTIME.md`.
