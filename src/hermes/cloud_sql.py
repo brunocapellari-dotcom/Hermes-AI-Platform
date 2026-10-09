@@ -112,7 +112,8 @@ _global_key: tuple[str, str, str] | None = None
 
 
 def cloud_sql_engine(url: str) -> Engine:
-    settings = CloudSQLIAMSettings()
+    # Pydantic BaseSettings supplies required fields from HERMES_CLOUD_SQL_* at runtime.
+    settings = CloudSQLIAMSettings()  # type: ignore[call-arg]
     key = (settings.instance_connection_name, settings.iam_user, settings.ip_type)
     global _global_key, _global_manager
     with _global_lock:

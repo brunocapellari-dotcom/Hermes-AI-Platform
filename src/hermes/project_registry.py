@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from enum import StrEnum
 from typing import Any
 
@@ -72,19 +73,19 @@ class ProjectRegistry:
         item = self.registry.get(RegistryKind.PROJECT, key)
         return ProjectRegistration.model_validate(item.payload) if item is not None else None
 
-    def list(self) -> list[ProjectRegistration]:
+    def list(self) -> builtins.list[ProjectRegistration]:
         return [
             ProjectRegistration.model_validate(item.payload)
             for item in self.registry.list(RegistryKind.PROJECT)
         ]
 
     def autonomy_matrix(self) -> AutonomyMatrix:
-        policies: list[CapabilityAutonomyPolicy] = []
+        policies: builtins.list[CapabilityAutonomyPolicy] = []
         for registration in self.list():
             policies.extend(registration.autonomy)
         return AutonomyMatrix(policies)
 
-    def candidates(self, capability: str) -> list[ProjectRegistration]:
+    def candidates(self, capability: str) -> builtins.list[ProjectRegistration]:
         return sorted(
             (
                 project

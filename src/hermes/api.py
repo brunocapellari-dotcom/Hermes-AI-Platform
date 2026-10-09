@@ -186,7 +186,11 @@ class AppContainer:
         self.models = PersistentModelRegistry(self.registry)
         self.agents = PersistentAgentRegistry(self.registry)
         self.usage = SqlUsageStore(self.db)
-        self.budget = BudgetGuard(self.usage, self.registry)
+        self.budget = BudgetGuard(
+            self.usage,
+            self.registry,
+            zero_cost_mode=settings.zero_cost_mode,
+        )
         self.world_state = WorldStateBuilder(
             self.registry, self.mission_store, self.audit, self.usage
         )

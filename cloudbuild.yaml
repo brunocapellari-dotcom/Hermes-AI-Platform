@@ -9,7 +9,7 @@ steps:
     args:
       - -ceu
       - |
-        docker run --rm \
+        docker run --rm --user 0 \
           -v /workspace:/workspace \
           -v /var/run/docker.sock:/var/run/docker.sock \
           -w /workspace hermes-ci:${BUILD_ID} bash -ceu '
