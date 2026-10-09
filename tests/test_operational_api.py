@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from hermes.api import create_app
 from hermes.config import Settings
+from hermes.operational_contracts import TaskStatus
 
 
 def make_client(tmp_path: Path) -> TestClient:
@@ -146,9 +147,9 @@ def test_completed_task_cannot_be_cancelled(tmp_path: Path) -> None:
         task = container.operational_state.get_task(task_id)
         assert task is not None
 
-        running = task.model_copy(update={"status": "RUNNING", "attempt": 1})
+        running = task.model_copy(update={"status": TaskStatus.RUNNING, "attempt": 1})
         container.operational_state.save_task(running)
-        completed = running.model_copy(update={"status": "COMPLETED"})
+        completed = running.model_copy(update={"status": TaskStatus.COMPLETED})
         container.operational_state.save_task(completed)
 
         response = client.post(f"/tasks/{task_id}/cancel")
