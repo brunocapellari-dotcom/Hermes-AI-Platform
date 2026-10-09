@@ -4,6 +4,7 @@ import base64
 import binascii
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Response
@@ -31,6 +32,7 @@ from hermes.domain import AgentSpec, ModelClass, ModelRouteRequest, PolicyReques
 from hermes.durable import DBOSMissionDispatcher
 from hermes.durable_benchmark import CANONICAL_SCENARIOS
 from hermes.ecosystem import CANONICAL_PROJECTS, ProjectContractValidator
+from hermes.event_store import SqlEventStore
 from hermes.evaluation import EvalCase, EvaluationLab, ReviewInput, ReviewPanel
 from hermes.evaluation_strategy import EvaluationPurpose, evaluation_route
 from hermes.factories import AgentAuditor, AgentFactory, SkillFactory
@@ -39,6 +41,9 @@ from hermes.integrations import OpenAICompatibleGateway, ResearchClient, SecondB
 from hermes.model_intelligence import AdaptiveModelRouter, PersistentModelIntelligence
 from hermes.mcp_benchmark import MCPBenchmarkTarget, scenarios_for
 from hermes.multimodal import OpenAICompatibleMultimodal
+from hermes.operational_admission import OperationalAdmissionService
+from hermes.operational_contracts import EventEnvelope, EventType, RequestModel, TaskStatus
+from hermes.operational_persistence import SqlOperationalStore
 from hermes.orchestrator import HermesOrchestrator
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
 from hermes.privacy import SensitiveDataGuard
