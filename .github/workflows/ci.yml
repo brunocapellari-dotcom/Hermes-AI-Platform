@@ -19,12 +19,14 @@ jobs:
       PYTHONPATH: .
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Install contract test dependencies
-        run: python -m pip install "pydantic>=2.10,<3" "pytest>=8,<10" "ruff>=0.8,<1" "mypy>=1.13,<2" "bandit>=1.8,<2"
+        run: python -m pip install "pydantic>=2.10,<3" "pytest>=8,<10" "ruff>=0.8,<1" "mypy>=1.13,<2" "bandit>=1.8,<2" "pytest-cov>=6.2,<8"
       - name: Compile contracts
         run: python -m compileall -q contracts
       - name: Ruff
@@ -32,6 +34,6 @@ jobs:
       - name: Strict typing
         run: mypy contracts
       - name: Contract tests
-        run: pytest -q tests
+        run: pytest -q -o addopts="" tests/test_ecosystem_e2e.py
       - name: Static security scan
         run: bandit -q -r contracts

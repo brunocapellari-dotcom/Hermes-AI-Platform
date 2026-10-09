@@ -1,0 +1,26 @@
+model
+  schema 1.1
+
+type user
+
+type hermes
+  relations
+    define can_dispatch: [user]
+    define can_manage_projects: [user]
+    define can_manage_models: [user]
+    define can_manage_agents: [user]
+    define can_manage_skills: [user]
+    define can_manage_tools: [user]
+    define can_manage_budgets: [user]
+    define can_approve_actions: [user]
+    define can_manage_improvements: [user]
+    define can_record_model_performance: [user]
+
+type tool
+  relations
+    define can_call: [user]
+
+type project
+  relations
+    define can_query: [user]
+    define can_execute: [user]

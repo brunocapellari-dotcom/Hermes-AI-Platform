@@ -1,0 +1,272 @@
+variable "project_id" {
+  type = string
+}
+
+variable "region" {
+  type    = string
+  default = "southamerica-east1"
+}
+
+variable "environment" {
+  type    = string
+  default = "prod"
+}
+
+variable "service_name" {
+  type    = string
+  default = "hermes-ai-platform"
+}
+
+variable "worker_pool_name" {
+  description = "Cloud Run worker pool that executes durable DBOS mission workflows."
+  type        = string
+  default     = "hermes-ai-worker"
+}
+
+variable "worker_instance_count" {
+  description = "Manual DBOS worker count. Keep one until live load and queue telemetry justify scaling."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.worker_instance_count >= 1 && var.worker_instance_count <= 20
+    error_message = "worker_instance_count must be between 1 and 20."
+  }
+}
+
+variable "migration_job_name" {
+  description = "Cloud Run Job used only for controlled Alembic + DBOS migrations."
+  type        = string
+  default     = "hermes-db-migrate"
+}
+
+variable "migration_job_enabled" {
+  description = "Create the migration job without executing it. Enable after a reviewed image exists."
+  type        = bool
+  default     = false
+}
+
+variable "service_auth_audience" {
+  description = "Stable custom OIDC audience for service-to-service Hermes calls."
+  type        = string
+  default     = "https://hermes.internal"
+
+  validation {
+    condition     = startswith(var.service_auth_audience, "https://")
+    error_message = "service_auth_audience must use HTTPS."
+  }
+}
+
+variable "service_invoker_members" {
+  description = "Explicit IAM members allowed to invoke the private Hermes Cloud Run API. Empty keeps the service ungranted by this stack."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for member in var.service_invoker_members :
+      member != "allUsers" && member != "allAuthenticatedUsers"
+    ])
+    error_message = "Hermes must not grant public or all-authenticated Cloud Run invocation."
+  }
+}
+
+variable "model_gateway_url" {
+  description = "OpenAI-compatible model gateway URL, typically LiteLLM. Empty keeps generation disabled."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.model_gateway_url == "" || startswith(var.model_gateway_url, "https://")
+    error_message = "model_gateway_url must be empty or use HTTPS."
+  }
+}
+
+variable "model_gateway_audience" {
+  description = "Optional Cloud Run custom/default audience when the model gateway itself is private."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.model_gateway_audience == "" || startswith(var.model_gateway_audience, "https://")
+    error_message = "model_gateway_audience must be empty or use HTTPS."
+  }
+}
+
+variable "model_gateway_api_key_secret_version" {
+  description = "Pinned Secret Manager version for the model gateway key. Null means no gateway key is injected."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "default_model" {
+  type    = string
+  default = ""
+}
+
+variable "embedding_model" {
+  type    = string
+  default = ""
+}
+
+variable "vision_model" {
+  type    = string
+  default = ""
+}
+
+variable "transcription_model" {
+  type    = string
+  default = ""
+}
+
+variable "speech_model" {
+  type    = string
+  default = ""
+}
+
+variable "rerank_model" {
+  type    = string
+  default = ""
+}
+
+variable "second_brain_url" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.second_brain_url == "" || startswith(var.second_brain_url, "https://")
+    error_message = "second_brain_url must be empty or use HTTPS."
+  }
+}
+
+variable "research_url" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.research_url == "" || startswith(var.research_url, "https://")
+    error_message = "research_url must be empty or use HTTPS."
+  }
+}
+
+variable "opa_url" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.opa_url == "" || startswith(var.opa_url, "https://")
+    error_message = "opa_url must be empty or use HTTPS."
+  }
+}
+
+variable "opa_audience" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.opa_audience == "" || startswith(var.opa_audience, "https://")
+    error_message = "opa_audience must be empty or use HTTPS."
+  }
+}
+
+variable "openfga_url" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.openfga_url == "" || startswith(var.openfga_url, "https://")
+    error_message = "openfga_url must be empty or use HTTPS."
+  }
+}
+
+variable "openfga_audience" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.openfga_audience == "" || startswith(var.openfga_audience, "https://")
+    error_message = "openfga_audience must be empty or use HTTPS."
+  }
+}
+
+variable "openfga_store_id" {
+  type    = string
+  default = ""
+}
+
+variable "openfga_model_id" {
+  type    = string
+  default = ""
+}
+
+variable "external_authorization_required" {
+  description = "Fail closed unless external OPA/OpenFGA authorization is configured for protected operations."
+  type        = bool
+  default     = true
+}
+
+variable "otlp_endpoint" {
+  description = "Optional OTLP/HTTP collector endpoint shared by Hermes API and DBOS worker."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.otlp_endpoint == "" || startswith(var.otlp_endpoint, "https://") || startswith(var.otlp_endpoint, "http://")
+    error_message = "otlp_endpoint must be empty or use HTTP(S)."
+  }
+}
+
+variable "allow_external_actions" {
+  description = "Global kill switch for project mutations; keep false until approval/idempotency live tests pass."
+  type        = bool
+  default     = false
+}
+
+variable "container_image" {
+  type = string
+}
+
+variable "db_tier" {
+  type    = string
+  default = "db-custom-1-3840"
+}
+
+variable "runtime_enabled" {
+  description = "Enable the Hermes Cloud Run API only after IAM database users, migrations and live gates are ready."
+  type        = bool
+  default     = false
+}
+
+variable "dbos_reference_enabled" {
+  description = "Enable DBOS reference dispatcher/worker resources for benchmark/staging. This is not a permanent durable-engine selection."
+  type        = bool
+  default     = false
+}
+
+variable "release_version" {
+  description = "Immutable Hermes application version/commit used for durable workflow versioning and audit."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.release_version == "" || length(trimspace(var.release_version)) >= 7
+    error_message = "release_version must be empty or an immutable release/commit identifier of at least 7 characters."
+  }
+}
+
+variable "dependency_lock_sha256" {
+  description = "SHA-256 of the generated uv.lock used to build the immutable Hermes release."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.dependency_lock_sha256 == "" || can(regex("^[0-9a-f]{64}$", lower(var.dependency_lock_sha256)))
+    error_message = "dependency_lock_sha256 must be empty or a 64-character hexadecimal SHA-256."
+  }
+}
+
+variable "vpc_cidr" {
+  type    = string
+  default = "10.40.0.0/24"
+}

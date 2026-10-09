@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: hermes
+      POSTGRES_USER: hermes
+      POSTGRES_PASSWORD: hermes-local-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hermes -d hermes"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports: ["5433:5432"]
+    volumes: ["hermes_pg:/var/lib/postgresql/data"]
+
+  hermes:
+    build: .
+    environment:
+      HERMES_ENVIRONMENT: development
+      HERMES_DATABASE_URL: postgresql+psycopg://hermes:hermes-local-only@postgres:5432/hermes
+      HERMES_AUTO_CREATE_SCHEMA: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports: ["8080:8080"]
+
+volumes:
+  hermes_pg:
