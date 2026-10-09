@@ -395,7 +395,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cancelled = task
 
         event_id = "event-" + hashlib.sha256(
-            f"{task_id}|TASK_CANCELLED".encode("utf-8")
+            f"{task_id}|TASK_CANCELLED".encode()
         ).hexdigest()[:32]
         if container.events.get(event_id) is None:
             request = container.operational_state.get_request(cancelled.request_id)
