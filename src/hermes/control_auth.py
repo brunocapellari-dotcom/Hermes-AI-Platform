@@ -22,6 +22,20 @@ class ProtectedOperation:
 PROTECTED_OPERATIONS: tuple[ProtectedOperation, ...] = (
     ProtectedOperation(
         "POST",
+        re.compile(r"^/requests$"),
+        "request:create",
+        "can_dispatch",
+        RiskLevel.MEDIUM,
+    ),
+    ProtectedOperation(
+        "POST",
+        re.compile(r"^/tasks/[^/]+/cancel$"),
+        "task:cancel",
+        "can_dispatch",
+        RiskLevel.MEDIUM,
+    ),
+    ProtectedOperation(
+        "POST",
         re.compile(r"^/v1/missions/[^/]+/dispatch$"),
         "mission:dispatch",
         "can_dispatch",
