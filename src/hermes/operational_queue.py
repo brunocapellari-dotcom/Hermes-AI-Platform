@@ -147,6 +147,7 @@ class OperationalTaskQueue:
                         heartbeat_at=current,
                         updated_at=current,
                     )
+                    .execution_options(synchronize_session=False)
                 )
                 if getattr(result, "rowcount", 0) != 1:
                     session.rollback()
