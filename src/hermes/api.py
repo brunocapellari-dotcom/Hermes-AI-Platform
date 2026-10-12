@@ -332,6 +332,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.state.container = container
     api.include_router(build_super_router(container.super_control))
 
+    def require_legacy_mission_api() -> None:
+        if not settings.legacy_mission_api_active:
+            raise HTTPException(
+                status_code=410,
+                detail="legacy mission API is disabled; use POST /requests",
+            )
+
     @api.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "hermes-ai-platform"}
@@ -624,12 +631,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.post("/v1/missions")
     async def create_mission(payload: MissionCreate) -> dict[str, Any]:
+        require_legacy_mission_api()
         actor = authenticated_actor("local-owner") or "local-owner"
         mission = await container.orchestrator.create_mission(payload.request, actor=actor)
         return mission.model_dump(mode="json")
 
     @api.get("/v1/missions/{mission_id}")
     def get_mission(mission_id: str) -> dict[str, Any]:
+        require_legacy_mission_api()
         mission = container.mission_store.get(mission_id)
         if mission is None:
             raise HTTPException(status_code=404, detail="mission not found")
@@ -637,6 +646,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.post("/v1/missions/{mission_id}/dispatch")
     def dispatch_mission(mission_id: str) -> dict[str, str]:
+        require_legacy_mission_api()
         if container.mission_store.get(mission_id) is None:
             raise HTTPException(status_code=404, detail="mission not found")
         if container.durable is None:
