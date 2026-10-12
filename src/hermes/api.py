@@ -44,6 +44,7 @@ from hermes.mcp_benchmark import MCPBenchmarkTarget, scenarios_for
 from hermes.multimodal import OpenAICompatibleMultimodal
 from hermes.operational_admission import OperationalAdmissionService
 from hermes.operational_contracts import EventEnvelope, EventType, RequestModel, TaskStatus
+from hermes.operational_health import OperationalHealthStore
 from hermes.operational_persistence import SqlOperationalStore
 from hermes.orchestrator import HermesOrchestrator
 from hermes.persistence import Database, SqlAuditSink, SqlMissionStore
@@ -295,6 +296,7 @@ class AppContainer:
         self.context_fabric = ContextFabric(router=self.context, compactor=self.compactor)
         self.projects = ProjectRegistry(self.registry)
         self.operational_state = SqlOperationalStore(self.db)
+        self.operational_health = OperationalHealthStore(self.registry)
         self.events = SqlEventStore(self.db)
         self.operational_admission = OperationalAdmissionService(
             state=self.operational_state,
@@ -348,7 +350,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         with container.db.engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+        operational = container.operational_health.snapshot(
+            required=settings.operational_worker_required,
+            stale_after_seconds=settings.operational_worker_stale_seconds,
+        )
+        if operational.status == "failed":
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "reason": "operational worker unavailable",
+                    "workers_healthy": operational.workers_healthy,
+                    "workers_total": operational.workers_total,
+                },
+            )
         return {"status": "ready"}
+
+    @api.get("/v1/operational/health")
+    def operational_health() -> dict[str, Any]:
+        return container.operational_health.snapshot(
+            required=settings.operational_worker_required,
+            stale_after_seconds=settings.operational_worker_stale_seconds,
+        ).model_dump(mode="json")
 
     @api.post("/requests")
     def create_request(payload: RequestModel) -> dict[str, Any]:
