@@ -28,6 +28,32 @@ class HermesClient:
                 raise ValueError("Hermes response must be a JSON object")
             return data
 
+    async def request(
+        self,
+        *,
+        source_project: str,
+        requested_capability: str,
+        idempotency_key: str,
+        priority: str = "P1",
+        payload: dict[str, Any] | None = None,
+        context_refs: list[str] | None = None,
+        constraints: dict[str, Any] | None = None,
+        security_level: str = "INTERNAL",
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/requests",
+            {
+                "source_project": source_project,
+                "requested_capability": requested_capability,
+                "priority": priority,
+                "payload": payload or {},
+                "context_refs": context_refs or [],
+                "constraints": constraints or {},
+                "security_level": security_level,
+                "idempotency_key": idempotency_key,
+            },
+        )
+
     async def mission(self, request: str, *, actor: str = "owner") -> dict[str, Any]:
         return await self._post("/v1/missions", {"request": request, "actor": actor})
 
