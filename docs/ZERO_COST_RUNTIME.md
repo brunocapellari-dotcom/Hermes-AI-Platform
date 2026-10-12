@@ -138,3 +138,15 @@ HERMES_HOLDING_URL=http://127.0.0.1:8001
 The worker uses the same durable SQLite state, P0-P3 ordering, leases, heartbeats, bounded retries, checkpoints and outbox/DLQ. The SQLite runtime enables foreign keys, a 30-second busy timeout and WAL mode for file-backed databases so the API and worker can share the local database safely.
 
 Do not expose the local worker or SQLite file to the network. Project and Holding endpoints must remain HTTPS or loopback HTTP under the zero-cost policy.
+
+
+## Worker readiness gate
+
+For the final local go-live smoke, enable the worker dependency gate after both API and worker are configured to use the same SQLite file:
+
+```env
+HERMES_OPERATIONAL_WORKER_REQUIRED=true
+HERMES_OPERATIONAL_WORKER_STALE_SECONDS=120
+```
+
+Then `/ready` fails closed when no healthy worker heartbeat is present. Inspect `/v1/operational/health` for worker count, freshness and last task/event activity. Keep the flag false for API-only development and unit tests.
