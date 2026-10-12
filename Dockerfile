@@ -9,6 +9,7 @@ RUN apt-get update \
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
+RUN mkdir -p /data && chown -R hermes:hermes /data
 USER hermes
 EXPOSE 8080
 CMD ["uvicorn", "hermes.asgi:app", "--host", "0.0.0.0", "--port", "8080"]
