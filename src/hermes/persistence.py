@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Float, String, Text, create_engine, func, select
+from sqlalchemy import DateTime, Float, String, Text, create_engine, event, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from hermes.cloud_sql import cloud_sql_engine, is_cloud_sql_iam_url
@@ -91,8 +91,23 @@ class Database:
         else:
             kwargs: dict[str, Any] = {"pool_pre_ping": True}
             if url.startswith("sqlite"):
-                kwargs["connect_args"] = {"check_same_thread": False}
+                kwargs["connect_args"] = {
+                    "check_same_thread": False,
+                    "timeout": 30,
+                }
             self.engine = create_engine(url, **kwargs)
+            if url.startswith("sqlite"):
+                @event.listens_for(self.engine, "connect")
+                def _sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> None:
+                    cursor = dbapi_connection.cursor()
+                    try:
+                        cursor.execute("PRAGMA foreign_keys=ON")
+                        cursor.execute("PRAGMA busy_timeout=30000")
+                        if ":memory:" not in url:
+                            cursor.execute("PRAGMA journal_mode=WAL")
+                            cursor.execute("PRAGMA synchronous=NORMAL")
+                    finally:
+                        cursor.close()
         self.sessions = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def create_schema(self) -> None:
