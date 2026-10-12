@@ -130,6 +130,7 @@ class OperationalTaskQueue:
                 if candidate is None:
                     return None
                 task_row, lease_row = candidate
+                recovered = task_row.status == TaskStatus.RUNNING.value
                 lease_until = current + timedelta(seconds=lease_seconds)
                 result = session.execute(
                     update(OperationalTaskLeaseRow)
@@ -150,11 +151,6 @@ class OperationalTaskQueue:
                 if getattr(result, "rowcount", 0) != 1:
                     session.rollback()
                     continue
-                recovered = (
-                    task_row.status == TaskStatus.RUNNING.value
-                    and lease_row.lease_until is not None
-                    and lease_row.lease_until <= current
-                )
                 task = TaskModel.model_validate_json(task_row.payload)
                 session.commit()
                 return TaskLease(
