@@ -46,6 +46,7 @@ evals = [
 hermes-worker = "hermes.worker:main"
 hermes-migrate-db = "hermes.db_migrate:main"
 hermes-local-db = "hermes.local_backup:main"
+hermes-operational-worker = "hermes.operational_worker:main"
 
 [build-system]
 requires = ["hatchling"]
