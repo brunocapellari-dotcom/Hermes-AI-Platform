@@ -105,3 +105,36 @@ hermes-local-db restore ./backups/hermes-backup.db ./restore-test/hermes.db
 ```
 
 After a successful restore drill, validate the restored database before replacing any production file. Backup confidentiality depends on host storage protection; use the operating system's disk/device encryption for the data and backup locations when available.
+
+
+## Operational worker
+
+The API admits and persists work; the operational worker performs project execution and drains the durable event outbox. In the zero-cost release it runs as a second local process against the same SQLite file.
+
+Start the API:
+
+```bash
+uvicorn hermes.asgi:app --host 127.0.0.1 --port 8080
+```
+
+Start the worker in another local process:
+
+```bash
+hermes-operational-worker
+```
+
+For an integration smoke cycle without a long-running loop:
+
+```bash
+hermes-operational-worker --once
+```
+
+When the local Holding is running on port 8001, keep:
+
+```env
+HERMES_HOLDING_URL=http://127.0.0.1:8001
+```
+
+The worker uses the same durable SQLite state, P0-P3 ordering, leases, heartbeats, bounded retries, checkpoints and outbox/DLQ. The SQLite runtime enables foreign keys, a 30-second busy timeout and WAL mode for file-backed databases so the API and worker can share the local database safely.
+
+Do not expose the local worker or SQLite file to the network. Project and Holding endpoints must remain HTTPS or loopback HTTP under the zero-cost policy.
