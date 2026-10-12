@@ -72,10 +72,12 @@ class HoldingEventDispatcher:
     @staticmethod
     def _retry_delay(record: OutboxRecord) -> float:
         attempt = record.attempts + 1
-        base = min(2 ** max(attempt - 1, 0), 60)
-        digest = hashlib.sha256(f"{record.event.event_id}|{attempt}".encode()).digest()[0]
-        jitter = (digest / 255.0) * min(base * 0.25, 5.0)
-        return min(float(base) + jitter, 60.0)
+        base = float(min(2 ** max(attempt - 1, 0), 60))
+        digest_value = int(
+            hashlib.sha256(f"{record.event.event_id}|{attempt}".encode()).digest()[0]
+        )
+        jitter = (digest_value / 255.0) * min(base * 0.25, 5.0)
+        return float(min(base + jitter, 60.0))
 
     def dispatch_batch(self, *, limit: int = 50) -> EventDeliveryReport:
         pending = self.events.pending(limit=limit)
