@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     holding_url: str | None = None
     operational_worker_id: str | None = None
     operational_worker_poll_seconds: float = 1.0
+    operational_worker_required: bool = False
+    operational_worker_stale_seconds: float = 120.0
     operational_task_lease_seconds: float = 60.0
     event_delivery_batch_size: int = 50
     second_brain_url: str | None = None

@@ -27,6 +27,7 @@ class RegistryKind(StrEnum):
     BUDGET = "budget"
     APPROVAL = "approval"
     EXECUTION_RECEIPT = "execution_receipt"
+    WORKER = "worker"
 
 
 class RegistryItem(BaseModel):

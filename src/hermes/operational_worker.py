@@ -6,11 +6,13 @@ import os
 import socket
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from hermes.config import Settings, get_settings
 from hermes.event_delivery import EventDeliveryReport, HoldingEventDispatcher
 from hermes.event_store import SqlEventStore
 from hermes.operational_executor import ExecutionResult, OperationalTaskExecutor
+from hermes.operational_health import OperationalHealthStore
 from hermes.operational_persistence import SqlOperationalStore
 from hermes.operational_queue import OperationalTaskQueue
 from hermes.persistence import Database
@@ -45,15 +47,22 @@ class OperationalWorker:
         self.events = SqlEventStore(self.db)
         self.projects = ProjectRegistry(self.registry)
         self.queue = OperationalTaskQueue(self.db)
-        worker_id = settings.operational_worker_id or (
+        self.worker_id = settings.operational_worker_id or (
             f"{socket.gethostname()}:{os.getpid()}"
+        )
+        self.started_at = datetime.now(UTC)
+        self.health = OperationalHealthStore(self.registry)
+        self.health.heartbeat(
+            self.worker_id,
+            status="healthy",
+            started_at=self.started_at,
         )
         self.executor = OperationalTaskExecutor(
             state=self.state,
             events=self.events,
             projects=self.projects,
             queue=self.queue,
-            worker_id=worker_id,
+            worker_id=self.worker_id,
             lease_seconds=settings.operational_task_lease_seconds,
         )
         self.dispatcher = (
@@ -67,15 +76,36 @@ class OperationalWorker:
         )
 
     def run_cycle(self) -> CycleResult:
-        task = self.executor.run_once()
-        events = (
-            self.dispatcher.dispatch_batch(limit=self.settings.event_delivery_batch_size)
-            if self.dispatcher is not None
-            else None
+        try:
+            task = self.executor.run_once()
+            events = (
+                self.dispatcher.dispatch_batch(limit=self.settings.event_delivery_batch_size)
+                if self.dispatcher is not None
+                else None
+            )
+        except Exception as exc:
+            self.health.heartbeat(
+                self.worker_id,
+                status="degraded",
+                started_at=self.started_at,
+                error=str(exc) or type(exc).__name__,
+            )
+            raise
+        self.health.heartbeat(
+            self.worker_id,
+            status="healthy",
+            started_at=self.started_at,
+            task_activity=task is not None,
+            event_activity=bool(events and events.attempted),
         )
         return CycleResult(task=task, events=events)
 
     def close(self) -> None:
+        self.health.heartbeat(
+            self.worker_id,
+            status="stopped",
+            started_at=self.started_at,
+        )
         self.db.close()
 
 
