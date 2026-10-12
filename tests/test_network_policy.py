@@ -25,8 +25,14 @@ def test_secure_service_url_allows_https_and_loopback(url: str) -> None:
         "http://example.com",
         "http://192.168.1.10:8080",
         "http://10.0.0.5",
+        "https://192.168.1.10:8443",
+        "https://10.0.0.5",
+        "https://169.254.169.254/latest/meta-data",
+        "https://[fe80::1]/metadata",
+        "https://metadata.google.internal/computeMetadata/v1/",
         "ftp://localhost/resource",
         "https://user:password@example.com",
+        "https://example.com/path#fragment",
         "not-a-url",
     ],
 )
@@ -60,3 +66,19 @@ def test_project_registration_rejects_plaintext_lan_endpoint() -> None:
             key="AGROLOG_MT",
             base_url="http://192.168.1.10:8010",
         )
+
+
+def test_project_registration_rejects_https_metadata_endpoint() -> None:
+    with pytest.raises(ValidationError, match="HTTPS or HTTP loopback"):
+        ProjectRegistration(
+            key="AGROLOG_MT",
+            base_url="https://169.254.169.254/latest",
+        )
+
+
+def test_project_registration_accepts_https_public_endpoint() -> None:
+    registration = ProjectRegistration(
+        key="AGROLOG_MT",
+        base_url="https://agrolog.example.com",
+    )
+    assert registration.base_url == "https://agrolog.example.com"
