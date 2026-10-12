@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from typing import Any
-
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
