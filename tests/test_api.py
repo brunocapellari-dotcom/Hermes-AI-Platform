@@ -41,3 +41,42 @@ def test_model_route_without_registry_fails_closed(tmp_path: Path) -> None:
     with client(tmp_path) as c:
         response = c.post("/v1/models/route", json={"required_classes": ["REASONING"]})
         assert response.status_code == 409
+
+
+
+def test_production_disables_legacy_static_mission_routing(tmp_path: Path) -> None:
+    settings = Settings(
+        environment="production",
+        database_url=f"sqlite:///{tmp_path / 'prod-api.db'}",
+        auto_create_schema=True,
+    )
+    with TestClient(create_app(settings)) as c:
+        legacy = c.post("/v1/missions", json={"request": "legacy route"})
+        assert legacy.status_code == 410
+        assert legacy.json()["detail"] == "legacy mission API is disabled; use POST /requests"
+
+        canonical = c.post(
+            "/requests",
+            json={
+                "source_project": "RESEARCH_AI",
+                "requested_capability": "freight_analysis",
+                "idempotency_key": "idem-prod-canonical-" + ("x" * 12),
+            },
+        )
+        assert canonical.status_code == 409
+        assert "no executable project registered" in canonical.json()["detail"]
+
+
+def test_legacy_mission_api_can_be_explicitly_enabled_for_controlled_compatibility(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        environment="production",
+        database_url=f"sqlite:///{tmp_path / 'compat-api.db'}",
+        auto_create_schema=True,
+        legacy_mission_api_enabled=True,
+    )
+    with TestClient(create_app(settings)) as c:
+        legacy = c.post("/v1/missions", json={"request": "compatibility route"})
+        assert legacy.status_code == 200
+        assert legacy.json()["mission_id"]
