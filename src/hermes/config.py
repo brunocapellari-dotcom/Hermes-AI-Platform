@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     speech_model: str | None = None
     rerank_model: str | None = None
     holding_url: str | None = None
+    operational_worker_id: str | None = None
+    operational_worker_poll_seconds: float = 1.0
+    operational_task_lease_seconds: float = 60.0
+    event_delivery_batch_size: int = 50
     second_brain_url: str | None = None
     research_url: str | None = None
     opa_url: str | None = None
