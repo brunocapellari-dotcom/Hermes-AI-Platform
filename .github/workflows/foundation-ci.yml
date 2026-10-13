@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: "0.12.17"
           enable-cache: true
@@ -71,7 +71,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Audit GitHub Actions security
-        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2 / zizmor 1.29.0
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.2 / zizmor 1.29.0
         with:
           version: "1.29.0"
           persona: auditor
@@ -109,7 +109,7 @@ jobs:
           load: true
           tags: hermes-ai-platform:ci
       - name: Generate CycloneDX SBOM
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: hermes-ai-platform:ci
           syft-version: v1.52.0
