@@ -2,12 +2,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
+from sqlalchemy import update
 
 from hermes.event_store import SqlEventStore
 from hermes.operational_admission import OperationalAdmissionService
 from hermes.operational_contracts import Priority, RequestModel, TaskStatus
 from hermes.operational_executor import OperationalTaskExecutor
-from hermes.operational_persistence import SqlOperationalStore
+from hermes.operational_persistence import OperationalTaskRow, SqlOperationalStore
 from hermes.operational_queue import OperationalTaskQueue
 from hermes.persistence import Database
 from hermes.project_registry import ProjectHealth, ProjectRegistration, ProjectRegistry
@@ -79,6 +80,34 @@ def test_priority_queue_claims_p0_before_p3(tmp_path: Path) -> None:
     assert lease.task.task_id == high.task.task_id
     assert lease.task.task_id != low.task.task_id
     queue.release(lease.task.task_id, "worker-a")
+    db.close()
+
+
+def test_priority_queue_ages_old_p3_to_prevent_starvation(tmp_path: Path) -> None:
+    db, _state, _events, _projects, queue, admission = setup_runtime(tmp_path)
+    low = admit(admission, "aged-low", Priority.P3)
+    high = admit(admission, "fresh-high", Priority.P0)
+    now = datetime.now(UTC)
+
+    with db.sessions() as session:
+        session.execute(
+            update(OperationalTaskRow)
+            .where(OperationalTaskRow.task_id == low.task.task_id)
+            .values(created_at=now - timedelta(minutes=10))
+        )
+        session.commit()
+
+    lease = queue.claim_next(
+        "worker-fairness",
+        lease_seconds=30,
+        starvation_seconds=300,
+        now=now,
+    )
+
+    assert lease is not None
+    assert lease.task.task_id == low.task.task_id
+    assert lease.task.task_id != high.task.task_id
+    queue.release(lease.task.task_id, "worker-fairness", now=now)
     db.close()
 
 
