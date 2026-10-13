@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     environment: str = "production"
     zero_cost_mode: bool = True
+    legacy_mission_api_enabled: bool | None = None
     database_url: str = "sqlite:///./hermes.db"
     dbos_system_database_url: str | None = None
     dbos_application_name: str = "hermes-worker"
@@ -51,6 +52,12 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = 20.0
     authorization_timeout_seconds: float = 5.0
     otlp_endpoint: str | None = None
+
+    @property
+    def legacy_mission_api_active(self) -> bool:
+        if self.legacy_mission_api_enabled is not None:
+            return self.legacy_mission_api_enabled
+        return not self.is_production
 
     @property
     def is_production(self) -> bool:

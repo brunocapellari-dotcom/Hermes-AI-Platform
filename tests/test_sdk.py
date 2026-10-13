@@ -46,6 +46,18 @@ def test_sdk_methods_and_response_validation(monkeypatch) -> None:
     FakeAsyncClient.responses = [FakeResponse({"mission_id": "m"})]
     assert asyncio.run(client.mission("goal"))["mission_id"] == "m"
 
+    FakeAsyncClient.responses = [FakeResponse({"task": {"status": "READY"}})]
+    canonical = asyncio.run(
+        client.request(
+            source_project="RESEARCH_AI",
+            requested_capability="freight_analysis",
+            idempotency_key="idem-sdk-" + ("x" * 12),
+            payload={"source": "USDA"},
+        )
+    )
+    assert canonical["task"]["status"] == "READY"
+    assert FakeAsyncClient.calls[-1][1] == "https://hermes.test/requests"
+
     FakeAsyncClient.responses = [FakeResponse({"registry_counts": {}})]
     assert asyncio.run(client.world_state())["registry_counts"] == {}
 
