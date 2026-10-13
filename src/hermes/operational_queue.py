@@ -82,19 +82,31 @@ class OperationalTaskQueue:
         worker_id: str,
         *,
         lease_seconds: float = 30.0,
+        starvation_seconds: float = 300.0,
         now: datetime | None = None,
     ) -> TaskLease | None:
         if not worker_id.strip():
             raise ValueError("worker_id is required")
         if lease_seconds <= 0 or lease_seconds > 3600:
             raise ValueError("lease_seconds must be between 0 and 3600")
+        if starvation_seconds <= 0 or starvation_seconds > 86_400:
+            raise ValueError("starvation_seconds must be between 0 and 86400")
         current = now or _now()
+        starvation_cutoff = current - timedelta(seconds=starvation_seconds)
         self._ensure_claimable_rows(current)
         priority_order = case(
             (OperationalTaskRow.priority == Priority.P0.value, 0),
             (OperationalTaskRow.priority == Priority.P1.value, 1),
             (OperationalTaskRow.priority == Priority.P2.value, 2),
             else_=3,
+        )
+        aged_order = case(
+            (OperationalTaskRow.created_at <= starvation_cutoff, 0),
+            else_=1,
+        )
+        aged_fifo_order = case(
+            (OperationalTaskRow.created_at <= starvation_cutoff, OperationalTaskRow.created_at),
+            else_=None,
         )
 
         for _ in range(4):
@@ -120,6 +132,8 @@ class OperationalTaskQueue:
                         ),
                     )
                     .order_by(
+                        aged_order,
+                        aged_fifo_order,
                         priority_order,
                         OperationalTaskLeaseRow.available_at,
                         OperationalTaskRow.created_at,
