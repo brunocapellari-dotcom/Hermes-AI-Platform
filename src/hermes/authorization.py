@@ -136,12 +136,20 @@ class CompositePolicyEngine:
         if identity_actor:
             request = request.model_copy(update={"actor": identity_actor, "subject": identity_actor})
         local_decision = self.local.authorize(request)
+        if local_decision.requires_approval:
+            return PolicyDecision(
+                allowed=False, requires_approval=True, reason=local_decision.reason
+            )
         if not local_decision.allowed:
             return local_decision
         if self.external_required and self.opa is None:
             return PolicyDecision(allowed=False, reason="external policy is required but OPA is not configured")
         if self.opa is not None:
             decision = self.opa.authorize(request)
+            if decision.requires_approval:
+                return PolicyDecision(
+                    allowed=False, requires_approval=True, reason=decision.reason
+                )
             if not decision.allowed:
                 return decision
         relationship_needed = bool(request.resource or request.relation)
@@ -151,6 +159,10 @@ class CompositePolicyEngine:
             )
         if self.openfga is not None and relationship_needed:
             decision = self.openfga.authorize(request)
+            if decision.requires_approval:
+                return PolicyDecision(
+                    allowed=False, requires_approval=True, reason=decision.reason
+                )
             if not decision.allowed:
                 return decision
         return PolicyDecision(allowed=True, reason="all configured authorization layers permit action")
