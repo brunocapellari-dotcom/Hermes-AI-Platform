@@ -35,5 +35,11 @@ jobs:
         run: mypy contracts
       - name: Contract tests
         run: pytest -q -o addopts="" tests/test_ecosystem_e2e.py
+      - name: Hermes composite policy approval regression
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install "httpx>=0.28,<1"
+          pytest -q -o addopts="" tests/test_composite_pending_approval.py
       - name: Static security scan
         run: bandit -q -r contracts
